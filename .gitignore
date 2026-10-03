@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+
+# macOS
+.DS_Store
+
+# Face dataset - keep private
+ml/dataset/registered/
+
+# Generated face embeddings
+ml/embeddings/
+
+# Model files
+ml/models/*.onnx
+ml/models/*.pt
+
+# IDE
+.vscode/
+.idea/
