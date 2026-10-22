@@ -1,0 +1,1288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teacher Dashboard – SmartAttendance</title>
+    <meta name="description" content="Manage attendance sessions, view today's attendance, student list, and attendance history.">
+    <link rel="stylesheet" href="shared.css">
+    <style>
+        .stats-grid { grid-template-columns: repeat(4, 1fr); }
+        .stat-box span { font-size: 28px; }
+
+        .camera-section {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 20px;
+        }
+        .camera-controls {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        .camera-feed { height: 400px; position: relative; }
+
+        /* Real-time multi-identity face overlay */
+        .mock-box {
+            position: absolute;
+            border: 2px solid #4da63d;
+            display: none;
+            pointer-events: none;
+            transition: all 0.12s ease-out;
+            box-sizing: border-box;
+            z-index: 5;
+        }
+        .mock-label {
+            position: absolute;
+            top: -24px;
+            left: -2px;
+            background: #4da63d;
+            color: white;
+            padding: 2px 8px;
+            font-size: 12px;
+            font-weight: bold;
+            border-radius: 2px;
+            white-space: nowrap;
+        }
+
+        @media (max-width: 768px) {
+            .stats-grid     { grid-template-columns: repeat(2, 1fr); }
+            .camera-section { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <h1>Teacher Dashboard</h1>
+    <div style="display:flex; align-items:center; gap:15px;">
+        <span style="color:white; font-weight:bold;" id="teacherNameHeader">Teacher</span>
+        <a href="index.html" class="logout-btn" id="logoutBtn">Logout</a>
+    </div>
+</div>
+
+<div class="container">
+
+    <!-- Overview card -->
+    <div class="card" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+        <div>
+            <h2>Dashboard Overview</h2>
+            <p style="margin:5px 0;">
+                <strong>Department / Class:</strong>
+                <span id="teacherDept">Computer Science – SY B.Tech</span>
+            </p>
+        </div>
+        <div id="backendStatusBadge" style="display:flex; align-items:center; gap:8px; font-size:13px; font-weight:600; padding:6px 14px; border-radius:20px; background:#e9ecef; color:#495057;">
+            <span style="display:inline-block; width:10px; height:10px; border-radius:50%; background:#adb5bd;" id="backendStatusDot"></span>
+            <span id="backendStatusText">Checking backend...</span>
+        </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-grid">
+        <div class="stat-box">
+            <span id="totalStudentsCount">–</span>
+            <label>Total Students</label>
+        </div>
+        <div class="stat-box">
+            <span style="color:#4da63d;" id="presentCount">–</span>
+            <label>Present Today</label>
+        </div>
+        <div class="stat-box">
+            <span style="color:#d82b2b;" id="absentCount">–</span>
+            <label>Absent Today</label>
+        </div>
+        <div class="stat-box">
+            <span id="percentageCount">–</span>
+            <label>Today's Percentage</label>
+        </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs" role="tablist">
+        <div class="tab active" role="tab" aria-selected="true"  tabindex="0" onclick="switchTab('startAttendance', this)">Live Security Monitor & Attendance</div>
+        <div class="tab"        role="tab" aria-selected="false" tabindex="0" onclick="switchTab('todaysAttendance', this)">Today's Attendance</div>
+        <div class="tab"        role="tab" aria-selected="false" tabindex="0" onclick="switchTab('studentList', this)">Student List</div>
+        <div class="tab"        role="tab" aria-selected="false" tabindex="0" onclick="switchTab('attendanceHistory', this)">Attendance History</div>
+    </div>
+
+    <!-- ── Tab: Live Security Monitor & Attendance ────────── -->
+    <div id="startAttendance" class="tab-content active" role="tabpanel">
+        <div class="card camera-section">
+            <div class="camera-feed" id="cameraBox">
+                <span id="cameraPlaceholder" style="color:white;">Camera Offline</span>
+                <video id="videoElement" autoplay playsinline aria-label="Webcam feed"></video>
+                <!-- Multi-identity bounding box overlay -->
+                <div id="faceBox" class="mock-box"><span id="faceLabel" class="mock-label"></span></div>
+                <!-- In-page camera error panel (hidden by default) -->
+                <div id="cameraError" style="
+                    display:none;
+                    position:absolute; inset:0;
+                    background:rgba(0,0,0,0.82);
+                    color:#fff;
+                    flex-direction:column;
+                    align-items:center;
+                    justify-content:center;
+                    text-align:center;
+                    padding:20px;
+                    gap:10px;
+                    border-radius:8px;
+                ">
+                    <div style="font-size:2rem;">📷</div>
+                    <div id="cameraErrorTitle" style="font-size:1.1rem; font-weight:bold; color:#f87171;"></div>
+                    <div id="cameraErrorMsg"  style="font-size:0.85rem; color:#d1d5db; line-height:1.5;"></div>
+                    <button onclick="hideCameraError()" style="
+                        margin-top:8px; padding:6px 16px;
+                        background:#4da63d; border:none; border-radius:4px;
+                        color:white; cursor:pointer; font-size:13px;
+                    ">Dismiss</button>
+                </div>
+            </div>
+            <div class="camera-controls">
+                <button class="btn btn-start" id="startCamBtn">Start Live Monitor & Attendance</button>
+                <button class="btn btn-stop"  id="stopCamBtn" style="display:none;">Stop Monitor</button>
+
+                <div style="background:#eef6fc; border:1px solid #b8daff; border-radius:6px; padding:10px 14px; font-size:13px; color:#004085; margin-top:10px; line-height:1.4;">
+                    <strong>Authoritative Security Engine:</strong><br>
+                    🟢 <strong>Green:</strong> Registered Student (Attendance Marked)<br>
+                    🟠 <strong>Orange:</strong> Approved Guest (Authorized Visitor)<br>
+                    🔴 <strong>Red:</strong> Unknown Person (Access Not Authorized)<br>
+                    🟡 <strong>Yellow:</strong> Check Required / Unverified
+                </div>
+
+                <div style="margin-top:10px; font-size:12px; color:#664d03; background:#fff3cd; border:1px solid #ffeeba; border-radius:4px; padding:8px 12px; line-height:1.4;">
+                    💡 <strong>Single-Laptop Webcam Tip:</strong> If operating with a single built-in webcam, ensure the Security Gate camera is stopped before activating the Teacher Classroom camera so the hardware video device is released.
+                </div>
+
+                <div class="recognition-status" style="margin-top:10px;">
+                    <h3 style="margin-top:0; color:#2b6099;">Live Authorization Decision</h3>
+                    <p><strong>Camera:</strong> <span id="cameraStateText">Inactive</span></p>
+                    <p><strong>Detected Person:</strong> <span id="activeIdentityText" style="font-weight:bold; color:#666;">No face in frame</span></p>
+                    <p><strong>Status:</strong> <span id="authStatusBadge" style="padding:3px 8px; border-radius:4px; font-size:12px; font-weight:bold; background:#eee; color:#666;">Standby</span></p>
+                    <div id="securityAlertWarning" style="display:none; margin-top:10px; background:#ffebee; border:1px solid #ef5350; border-radius:4px; padding:8px 12px; font-size:12px; color:#c62828; font-weight:600;">
+                        ⚠️ SECURITY ALERT: Unregistered person detected in monitored area.
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Shared Live Campus Events & Approved Guests -->
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-top:20px;">
+            <!-- Campus Security Alerts -->
+            <div class="card">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                    <h2 style="margin:0; font-size:16px;">Live Security Alerts & Events</h2>
+                    <span id="liveEventsDot" style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#4da63d;"></span>
+                </div>
+                <div class="table-container" style="max-height:220px; overflow-y:auto;">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th scope="col">Time</th>
+                                <th scope="col">Event / Subject</th>
+                                <th scope="col">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="teacherSecurityEventsBody">
+                            <tr><td colspan="3" class="empty-row-text">No security alerts recorded today.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Approved Guests on Campus -->
+            <div class="card">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                    <h2 style="margin:0; font-size:16px;">Approved Guests on Campus</h2>
+                    <button class="btn btn-view" style="font-size:11px; padding:4px 8px;" onclick="loadTeacherGuests()">Refresh</button>
+                </div>
+                <div class="table-container" style="max-height:220px; overflow-y:auto;">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th scope="col">Guest Name</th>
+                                <th scope="col">Host & Purpose</th>
+                                <th scope="col">Valid Until</th>
+                            </tr>
+                        </thead>
+                        <tbody id="teacherGuestsBody">
+                            <tr><td colspan="3" class="empty-row-text">No approved guests currently on campus.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Tab: Today's Attendance ────────────────────────── -->
+    <div id="todaysAttendance" class="tab-content" role="tabpanel">
+        <div class="card">
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+                <h2 style="margin:0;">Today's Attendance (<span id="todayDateLabel"></span>)</h2>
+                <div style="display:flex; gap:10px; align-items:center;">
+                    <input type="text" id="searchToday" placeholder="Search student…" style="padding:8px; border:1px solid #ccc; border-radius:4px; font-size:14px;" aria-label="Search students">
+                    <button class="btn btn-view" style="padding:8px 14px; font-size:13px;" onclick="loadTodayAttendance()">Refresh</button>
+                </div>
+            </div>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th scope="col">Roll Number</th>
+                            <th scope="col">Student Name</th>
+                            <th scope="col">Time</th>
+                            <th scope="col">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="todayTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Tab: Student List ──────────────────────────────── -->
+    <div id="studentList" class="tab-content" role="tabpanel">
+        <div class="card">
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:10px;">
+                <h2 style="margin:0; border-bottom:none; padding-bottom:0;">Student List</h2>
+                <button class="btn btn-view" style="padding:8px 14px; font-size:13px;" onclick="loadStudents()">Refresh</button>
+            </div>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th scope="col">Roll Number</th>
+                            <th scope="col">Student Name</th>
+                            <th scope="col">Department / Class</th>
+                            <th scope="col">Attendance Record</th>
+                            <th scope="col">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="studentListBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Tab: Attendance History ────────────────────────── -->
+    <div id="attendanceHistory" class="tab-content" role="tabpanel">
+        <div class="card">
+            <h2>Attendance History</h2>
+            <div class="filters">
+                <input type="date" id="historyDate" aria-label="Select date">
+                <select id="historyClass" aria-label="Select class">
+                    <option value="">All Classes</option>
+                    <option value="SY B.Tech">SY B.Tech</option>
+                    <option value="TY B.Tech">TY B.Tech</option>
+                </select>
+                <input type="text" id="historySearch" placeholder="Search roll or name…" aria-label="Search history">
+                <button class="btn btn-view" onclick="filterHistory()">Filter</button>
+                <button class="btn" style="background:#6c757d; font-size:14px;" onclick="resetHistoryFilters()">Reset</button>
+            </div>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th scope="col">Roll Number</th>
+                            <th scope="col">Student Name</th>
+                            <th scope="col">Date</th>
+                            <th scope="col">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="historyTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Download Attendance Excel Card -->
+        <div class="card" style="margin-top:20px; border-top: 3px solid #2b6099;">
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+                <div>
+                    <h2 style="margin:0; font-size:16px; color:#1b365d; border-bottom:none; padding-bottom:0;">📥 Download Attendance Excel</h2>
+                    <p style="font-size:12px; color:#666; margin:4px 0 0 0;">
+                        Export official classroom attendance with per-session breakdown, present/absent counts, and student attendance percentages (.xlsx format).
+                    </p>
+                </div>
+            </div>
+            <div style="display:flex; flex-wrap:wrap; gap:15px; align-items:flex-end; margin-top:15px; background:#f8f9fa; padding:12px 16px; border-radius:6px; border:1px solid #e9ecef;">
+                <div>
+                    <label style="display:block; font-size:12px; font-weight:600; color:#333; margin-bottom:4px;">Report Type</label>
+                    <select id="excelReportType" onchange="onReportTypeChange()" style="padding:7px 10px; border:1px solid #ccc; border-radius:4px; font-size:13px;">
+                        <option value="monthly">Monthly Report</option>
+                        <option value="semester">Full Semester (Odd/Even)</option>
+                        <option value="custom">Custom Date Range</option>
+                    </select>
+                </div>
+                <div id="excelMonthGroup">
+                    <label style="display:block; font-size:12px; font-weight:600; color:#333; margin-bottom:4px;">Select Month</label>
+                    <input type="month" id="excelMonthInput" style="padding:6px 10px; border:1px solid #ccc; border-radius:4px; font-size:13px;">
+                </div>
+                <div id="excelCustomGroup" style="display:none; gap:10px; align-items:flex-end;">
+                    <div>
+                        <label style="display:block; font-size:12px; font-weight:600; color:#333; margin-bottom:4px;">From</label>
+                        <input type="date" id="excelStartDate" style="padding:6px 10px; border:1px solid #ccc; border-radius:4px; font-size:13px;">
+                    </div>
+                    <div>
+                        <label style="display:block; font-size:12px; font-weight:600; color:#333; margin-bottom:4px;">To</label>
+                        <input type="date" id="excelEndDate" style="padding:6px 10px; border:1px solid #ccc; border-radius:4px; font-size:13px;">
+                    </div>
+                </div>
+                <div>
+                    <button class="btn btn-view" id="downloadExcelBtn" onclick="downloadAttendanceExcel()" style="padding:8px 16px; font-size:13px; font-weight:600; display:flex; align-items:center; gap:6px;">
+                        <span>📊</span> Download Excel
+                    </button>
+                </div>
+                <div id="excelDownloadStatus" style="font-size:12px; color:#666; margin-left:auto; display:none;"></div>
+            </div>
+        </div>
+    </div>
+
+</div><!-- /container -->
+
+<script src="auth.js"></script>
+<script>
+    /* ── Normalize URL: redirect from [::] to localhost if needed ── */
+    if (window.location.hostname === '::' || window.location.hostname === '[::]') {
+        const portStr = window.location.port ? `:${window.location.port}` : '';
+        window.location.replace(`http://localhost${portStr}${window.location.pathname}${window.location.search}`);
+    }
+
+    /* ── Configuration ── */
+    const CAMERA_ID = 'teacher_monitor'; // Camera identifier — sent to backend for per-camera deduplication
+
+    /* ── State ── */
+    let currentUser = null;
+    let studentsData = [];
+    let todayAttendanceData = [];
+    let historyAttendanceData = [];
+    let mediaStream = null;
+    let isProcessingFrame = false;
+    let recognitionInterval = null;
+    let captureCanvas = null;
+    const markedStudentsThisSession = new Set();
+    let eventsPollInterval = null;
+
+    /* ── DOM refs ── */
+    const startBtn             = document.getElementById('startCamBtn');
+    const stopBtn              = document.getElementById('stopCamBtn');
+    const video                = document.getElementById('videoElement');
+    const placeholder          = document.getElementById('cameraPlaceholder');
+    const logoutBtn            = document.getElementById('logoutBtn');
+    const cameraBox            = document.getElementById('cameraBox');
+    const faceBox              = document.getElementById('faceBox');
+    const faceLabel            = document.getElementById('faceLabel');
+    const camStateText         = document.getElementById('cameraStateText');
+    const activeIdentityText   = document.getElementById('activeIdentityText');
+    const authStatusBadge      = document.getElementById('authStatusBadge');
+    const securityAlertWarning = document.getElementById('securityAlertWarning');
+
+    /* ── Tab switching ── */
+    function switchTab(tabId, clickedEl) {
+        document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+        document.querySelectorAll('.tab').forEach(el => {
+            el.classList.remove('active');
+            el.setAttribute('aria-selected', 'false');
+        });
+        document.getElementById(tabId).classList.add('active');
+        clickedEl.classList.add('active');
+        clickedEl.setAttribute('aria-selected', 'true');
+    }
+
+    /* ── Date helper (ISO YYYY-MM-DD local) ── */
+    function getTodayIsoDate() {
+        const d = new Date();
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    }
+
+    /* ── Safe table cell helper (prevents HTML injection) ── */
+    function createCell(text, className) {
+        const td = document.createElement('td');
+        if (className) td.className = className;
+        td.textContent = text != null ? text : '–';
+        return td;
+    }
+
+    /* ── Backend Health Check ── */
+    async function checkBackendHealth() {
+        const dot   = document.getElementById('backendStatusDot');
+        const text  = document.getElementById('backendStatusText');
+        const badge = document.getElementById('backendStatusBadge');
+
+        try {
+            const resp = await fetch(`${BACKEND_URL}/api/health`, { method: 'GET' });
+            if (resp.ok) {
+                const data = await resp.json();
+                if (dot) dot.style.background = '#4da63d';
+                if (text) text.textContent = `Backend Online (${data.total_students} students)`;
+                if (badge) {
+                    badge.style.background = '#e8f5e9';
+                    badge.style.color = '#2e7d32';
+                }
+            } else {
+                throw new Error(`HTTP ${resp.status}`);
+            }
+        } catch (err) {
+            if (dot) dot.style.background = '#d82b2b';
+            if (text) text.textContent = 'Backend Offline';
+            if (badge) {
+                badge.style.background = '#ffebee';
+                badge.style.color = '#c62828';
+            }
+        }
+    }
+
+    /* ── Update Overview Stats ── */
+    function updateDashboardStats() {
+        const totalEl   = document.getElementById('totalStudentsCount');
+        const presentEl = document.getElementById('presentCount');
+        const absentEl  = document.getElementById('absentCount');
+        const pctEl     = document.getElementById('percentageCount');
+
+        const total = studentsData.length;
+        if (totalEl) totalEl.textContent = total > 0 ? total : '0';
+
+        const presentRolls = new Set(
+            todayAttendanceData
+                .filter(r => (r.status || '').toLowerCase() === 'present')
+                .map(r => r.roll_no)
+        );
+        const presentCount = presentRolls.size;
+        const absentCount  = Math.max(0, total - presentCount);
+        const percentage   = total > 0 ? Math.round((presentCount / total) * 100) + '%' : '0%';
+
+        if (presentEl) presentEl.textContent = presentCount;
+        if (absentEl)  absentEl.textContent  = absentCount;
+        if (pctEl)     pctEl.textContent     = percentage;
+    }
+
+    /* ── Fetch & Render Students ── */
+    async function loadStudents() {
+        const tbody = document.getElementById('studentListBody');
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:20px; color:#666;">Loading registered students from backend...</td></tr>';
+
+        try {
+            const resp = await fetch(`${BACKEND_URL}/api/students`, {
+                headers: getAuthHeaders()
+            });
+            if (handleAuthResponseError(resp)) return;
+            if (!resp.ok) throw new Error(`HTTP error ${resp.status}`);
+            studentsData = await resp.json();
+            renderStudentList(studentsData);
+            updateDashboardStats();
+        } catch (err) {
+            console.error('[SmartAttendance] Failed to load students:', err);
+            tbody.innerHTML = '';
+            const tr = document.createElement('tr');
+            const td = document.createElement('td');
+            td.colSpan = 5;
+            td.style.textAlign = 'center';
+            td.style.padding = '20px';
+            td.style.color = '#d82b2b';
+            td.innerHTML = `⚠️ Failed to load students from backend (${BACKEND_URL}). <button class="btn btn-view" style="margin-left:10px; padding:4px 10px; font-size:12px;" onclick="loadStudents()">Retry</button>`;
+            tr.appendChild(td);
+            tbody.appendChild(tr);
+        }
+    }
+
+    function renderStudentList(students) {
+        const tbody = document.getElementById('studentListBody');
+        tbody.innerHTML = '';
+
+        if (!students || students.length === 0) {
+            const tr = document.createElement('tr');
+            const td = document.createElement('td');
+            td.colSpan = 5;
+            td.style.textAlign = 'center';
+            td.style.padding = '20px';
+            td.style.color = '#888';
+            td.textContent = 'No registered students found in the database.';
+            tr.appendChild(td);
+            tbody.appendChild(tr);
+            return;
+        }
+
+        const totalDates = new Set(historyAttendanceData.map(a => a.date)).size;
+
+        students.forEach(s => {
+            const tr = document.createElement('tr');
+            tr.appendChild(createCell(s.roll_no));
+            tr.appendChild(createCell(s.name));
+
+            const deptParts = [s.department, s.class].filter(Boolean);
+            const deptText  = deptParts.length > 0 ? deptParts.join(' – ') : 'Unassigned';
+            tr.appendChild(createCell(deptText));
+
+            const studentDays = historyAttendanceData.filter(
+                a => a.roll_no === s.roll_no && (a.status || '').toLowerCase() === 'present'
+            ).length;
+            const recordText = totalDates > 0
+                ? `${Math.round((studentDays / totalDates) * 100)}% (${studentDays}/${totalDates} days)`
+                : (studentDays > 0 ? `${studentDays} recorded` : '–');
+            tr.appendChild(createCell(recordText));
+
+            const tdAction = document.createElement('td');
+            const viewBtn = document.createElement('button');
+            viewBtn.className = 'btn btn-view';
+            viewBtn.style.padding = '6px 12px';
+            viewBtn.style.fontSize = '12px';
+            viewBtn.textContent = 'View';
+            viewBtn.addEventListener('click', () => viewStudentAttendance(s.roll_no));
+            tdAction.appendChild(viewBtn);
+            tr.appendChild(tdAction);
+
+            tbody.appendChild(tr);
+        });
+    }
+
+    function viewStudentAttendance(rollNo) {
+        const historyTab = document.querySelectorAll('.tab')[3];
+        switchTab('attendanceHistory', historyTab);
+        const searchInput = document.getElementById('historySearch');
+        if (searchInput) {
+            searchInput.value = rollNo;
+            filterHistory();
+        }
+    }
+
+    /* ── Fetch & Render Today's Attendance ── */
+    async function loadTodayAttendance() {
+        const todayStr = getTodayIsoDate();
+        const dateLabel = document.getElementById('todayDateLabel');
+        if (dateLabel) dateLabel.textContent = todayStr;
+
+        const tbody = document.getElementById('todayTableBody');
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:20px; color:#666;">Loading today\'s attendance...</td></tr>';
+
+        try {
+            const resp = await fetch(`${BACKEND_URL}/api/attendance?date=${encodeURIComponent(todayStr)}`, {
+                headers: getAuthHeaders()
+            });
+            if (handleAuthResponseError(resp)) return;
+            if (!resp.ok) throw new Error(`HTTP error ${resp.status}`);
+            todayAttendanceData = await resp.json();
+            renderTodayTable(todayAttendanceData);
+            updateDashboardStats();
+        } catch (err) {
+            console.error('[SmartAttendance] Failed to load today\'s attendance:', err);
+            tbody.innerHTML = '';
+            const tr = document.createElement('tr');
+            const td = document.createElement('td');
+            td.colSpan = 4;
+            td.style.textAlign = 'center';
+            td.style.padding = '20px';
+            td.style.color = '#d82b2b';
+            td.innerHTML = `⚠️ Failed to load today's attendance records. <button class="btn btn-view" style="margin-left:10px; padding:4px 10px; font-size:12px;" onclick="loadTodayAttendance()">Retry</button>`;
+            tr.appendChild(td);
+            tbody.appendChild(tr);
+        }
+    }
+
+    function renderTodayTable(data) {
+        const tbody = document.getElementById('todayTableBody');
+        tbody.innerHTML = '';
+
+        if (!data || data.length === 0) {
+            const tr = document.createElement('tr');
+            const td = document.createElement('td');
+            td.colSpan = 4;
+            td.style.textAlign = 'center';
+            td.style.padding = '20px';
+            td.style.color = '#888';
+            const todayStr = getTodayIsoDate();
+            td.textContent = `No attendance records found for today (${todayStr}). Check-ins recorded via Security Gate will appear here.`;
+            tr.appendChild(td);
+            tbody.appendChild(tr);
+            return;
+        }
+
+        data.forEach(item => {
+            const tr = document.createElement('tr');
+            tr.appendChild(createCell(item.roll_no));
+            tr.appendChild(createCell(item.name || item.roll_no));
+            tr.appendChild(createCell(item.entry_time || '–'));
+
+            const statusText = (item.status || 'present');
+            const isPresent  = statusText.toLowerCase() === 'present';
+            const tdStatus   = createCell(statusText.charAt(0).toUpperCase() + statusText.slice(1), isPresent ? 'status-present' : 'status-absent');
+            tr.appendChild(tdStatus);
+
+            tbody.appendChild(tr);
+        });
+    }
+
+    document.getElementById('searchToday').addEventListener('input', e => {
+        const val = e.target.value.trim().toLowerCase();
+        const filtered = todayAttendanceData.filter(s =>
+            (s.name && s.name.toLowerCase().includes(val)) ||
+            (s.roll_no && s.roll_no.toLowerCase().includes(val))
+        );
+        renderTodayTable(filtered);
+    });
+
+    /* ── Fetch & Render Attendance History ── */
+    async function loadAttendanceHistory(dateFilter) {
+        const tbody = document.getElementById('historyTableBody');
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:20px; color:#666;">Loading attendance history...</td></tr>';
+
+        try {
+            let url = `${BACKEND_URL}/api/attendance`;
+            if (dateFilter) {
+                url += `?date=${encodeURIComponent(dateFilter)}`;
+            }
+            const resp = await fetch(url, {
+                headers: getAuthHeaders()
+            });
+            if (handleAuthResponseError(resp)) return;
+            if (!resp.ok) throw new Error(`HTTP error ${resp.status}`);
+            historyAttendanceData = await resp.json();
+            renderHistoryTable(historyAttendanceData);
+            if (studentsData.length > 0) {
+                renderStudentList(studentsData);
+            }
+        } catch (err) {
+            console.error('[SmartAttendance] Failed to load attendance history:', err);
+            tbody.innerHTML = '';
+            const tr = document.createElement('tr');
+            const td = document.createElement('td');
+            td.colSpan = 4;
+            td.style.textAlign = 'center';
+            td.style.padding = '20px';
+            td.style.color = '#d82b2b';
+            td.innerHTML = `⚠️ Failed to load attendance history. <button class="btn btn-view" style="margin-left:10px; padding:4px 10px; font-size:12px;" onclick="loadAttendanceHistory()">Retry</button>`;
+            tr.appendChild(td);
+            tbody.appendChild(tr);
+        }
+    }
+
+    function renderHistoryTable(data) {
+        const tbody = document.getElementById('historyTableBody');
+        tbody.innerHTML = '';
+
+        if (!data || data.length === 0) {
+            const tr = document.createElement('tr');
+            const td = document.createElement('td');
+            td.colSpan = 4;
+            td.style.textAlign = 'center';
+            td.style.padding = '20px';
+            td.style.color = '#888';
+            td.textContent = 'No attendance history records match the selected filters.';
+            tr.appendChild(td);
+            tbody.appendChild(tr);
+            return;
+        }
+
+        data.forEach(item => {
+            const tr = document.createElement('tr');
+            tr.appendChild(createCell(item.roll_no));
+            tr.appendChild(createCell(item.name || item.roll_no));
+            tr.appendChild(createCell(item.date || '–'));
+
+            const statusText = (item.status || 'present');
+            const isPresent  = statusText.toLowerCase() === 'present';
+            const tdStatus   = createCell(statusText.charAt(0).toUpperCase() + statusText.slice(1), isPresent ? 'status-present' : 'status-absent');
+            tr.appendChild(tdStatus);
+
+            tbody.appendChild(tr);
+        });
+    }
+
+    function filterHistory() {
+        const dateVal   = document.getElementById('historyDate').value;
+        const searchVal = document.getElementById('historySearch').value.trim().toLowerCase();
+
+        let filtered = historyAttendanceData;
+        if (dateVal) {
+            filtered = filtered.filter(item => item.date === dateVal);
+        }
+        if (searchVal) {
+            filtered = filtered.filter(item =>
+                (item.name && item.name.toLowerCase().includes(searchVal)) ||
+                (item.roll_no && item.roll_no.toLowerCase().includes(searchVal))
+            );
+        }
+        renderHistoryTable(filtered);
+    }
+
+    function resetHistoryFilters() {
+        document.getElementById('historyDate').value = '';
+        document.getElementById('historySearch').value = '';
+        const classSelect = document.getElementById('historyClass');
+        if (classSelect) classSelect.value = '';
+        renderHistoryTable(historyAttendanceData);
+    }
+
+    /* ── Camera Preview Controls ── */
+    function showCameraError(title, msg) {
+        const box = document.getElementById('cameraError');
+        document.getElementById('cameraErrorTitle').textContent = title;
+        document.getElementById('cameraErrorMsg').innerHTML     = msg;
+        box.style.display = 'flex';
+        placeholder.style.display = 'none';
+    }
+
+    function hideCameraError() {
+        document.getElementById('cameraError').style.display = 'none';
+        placeholder.style.display = 'block';
+    }
+
+    startBtn.addEventListener('click', async () => {
+        hideCameraError();
+
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            showCameraError(
+                'Camera API unavailable',
+                'Browser camera access requires a <strong>secure context</strong>.<br><br>' +
+                'Make sure you are visiting <code>http://localhost:8080</code> ' +
+                '(not a <code>file://</code> URL) or use HTTPS.<br><br>' +
+                'Current origin: <code>' + window.location.origin + '</code>'
+            );
+            return;
+        }
+
+        try {
+            mediaStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+            video.srcObject = mediaStream;
+            video.style.display = 'block';
+            placeholder.style.display = 'none';
+            startBtn.style.display = 'none';
+            stopBtn.style.display  = 'block';
+
+            if (camStateText) {
+                camStateText.textContent = 'Webcam Monitor Active';
+                camStateText.style.color = '#4da63d';
+            }
+
+            // Initialize capture canvas and recognition loop
+            captureCanvas = document.createElement('canvas');
+            if (recognitionInterval) clearInterval(recognitionInterval);
+            recognitionInterval = setInterval(recognizeFrame, 1400);
+
+        } catch (err) {
+            console.error('[SmartAttendance] Camera error:', err.name, err.message);
+
+            let title, msg;
+            switch (err.name) {
+                case 'NotAllowedError':
+                case 'PermissionDeniedError':
+                    title = 'Camera Permission Denied';
+                    msg   = 'Chrome blocked camera access for this site.<br><br>' +
+                            '<strong>To fix:</strong><br>' +
+                            '1. Click the <strong>🔒 or 📷</strong> icon in the Chrome address bar<br>' +
+                            '2. Set <em>Camera</em> → <strong>Allow</strong><br>' +
+                            '3. Reload the page and try again<br><br>' +
+                            '<strong>macOS check:</strong> System Settings → Privacy &amp; Security → Camera → enable Google Chrome';
+                    break;
+                case 'NotFoundError':
+                case 'DevicesNotFoundError':
+                    title = 'No Camera Found';
+                    msg   = 'No webcam was detected on this device.<br><br>' +
+                            'Make sure your MacBook camera is not physically blocked, ' +
+                            'and that no hardware switch is disabling it.';
+                    break;
+                case 'NotReadableError':
+                case 'TrackStartError':
+                    title = 'Camera Already in Use';
+                    msg   = 'Another application is currently using the camera.<br><br>' +
+                            '<strong>To fix:</strong><br>' +
+                            '• Close FaceTime, Zoom, Teams, or any other video app<br>' +
+                            '• If the Python ML script (<code>live_recognition.py</code>) ' +
+                            'is running, stop it first — Python and the browser cannot share the webcam.<br><br>' +
+                            'After closing the other app, click Start Attendance again.';
+                    break;
+                case 'OverconstrainedError':
+                    title = 'Camera Constraints Not Met';
+                    msg   = 'The requested camera settings could not be satisfied.<br>' +
+                            'Error: ' + err.message;
+                    break;
+                default:
+                    title = 'Camera Error (' + err.name + ')';
+                    msg   = err.message +
+                            '<br><br>Check the browser console (F12) for more details.';
+            }
+            showCameraError(title, msg);
+        }
+    });
+
+    function stopCamera() {
+        if (recognitionInterval) {
+            clearInterval(recognitionInterval);
+            recognitionInterval = null;
+        }
+
+        if (mediaStream) {
+            mediaStream.getTracks().forEach(t => t.stop());
+            mediaStream = null;
+        }
+        video.srcObject = null;
+        video.style.display       = 'none';
+        placeholder.style.display = 'block';
+        startBtn.style.display    = 'block';
+        stopBtn.style.display     = 'none';
+
+        if (camStateText) {
+            camStateText.textContent = 'Inactive';
+            camStateText.style.color = '#666';
+        }
+        if (faceBox) faceBox.style.display = 'none';
+        if (activeIdentityText) {
+            activeIdentityText.textContent = 'No face in frame';
+            activeIdentityText.style.color = '#666';
+        }
+        if (authStatusBadge) {
+            authStatusBadge.textContent = 'Standby';
+            authStatusBadge.style.background = '#eee';
+            authStatusBadge.style.color = '#666';
+        }
+        if (securityAlertWarning) {
+            securityAlertWarning.style.display = 'none';
+        }
+    }
+
+    /* ── Live Frame Capture & Authoritative Backend Recognition ── */
+    async function recognizeFrame() {
+        if (!mediaStream || isProcessingFrame || video.readyState < 2) {
+            return;
+        }
+
+        isProcessingFrame = true;
+
+        try {
+            const vw = video.videoWidth;
+            const vh = video.videoHeight;
+            if (!vw || !vh) {
+                isProcessingFrame = false;
+                return;
+            }
+
+            captureCanvas.width  = vw;
+            captureCanvas.height = vh;
+            const ctx = captureCanvas.getContext('2d');
+            ctx.drawImage(video, 0, 0, vw, vh);
+
+            const blob = await new Promise(resolve => captureCanvas.toBlob(resolve, 'image/jpeg', 0.85));
+            if (!blob) {
+                isProcessingFrame = false;
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', blob, 'teacher_monitor_frame.jpg');
+
+            const resp = await fetch(`${BACKEND_URL}/api/recognize?camera_id=${encodeURIComponent(CAMERA_ID)}`, {
+                method: 'POST',
+                headers: getAuthHeaders(),
+                body: formData,
+            });
+
+            if (resp.status === 401) {
+                stopCamera();
+                clearSession();
+                window.location.replace('index.html?session_expired=1');
+                return;
+            }
+
+            if (!resp.ok) {
+                console.warn(`[SmartAttendance] /api/recognize returned HTTP ${resp.status}`);
+                isProcessingFrame = false;
+                return;
+            }
+
+            const data = await resp.json();
+            handleRecognitionResults(data, vw, vh);
+
+        } catch (err) {
+            console.error('[SmartAttendance] Teacher recognition frame error:', err);
+        } finally {
+            isProcessingFrame = false;
+        }
+    }
+
+    /* ── Handle Authoritative Recognition Decisions ── */
+    function handleRecognitionResults(data, videoW, videoH) {
+        const results = data.results || [];
+        const detectedFaces = results.filter(r => r.status !== 'NO_FACE');
+
+        if (detectedFaces.length === 0) {
+            if (faceBox) faceBox.style.display = 'none';
+            if (activeIdentityText) {
+                activeIdentityText.textContent = 'No face in frame';
+                activeIdentityText.style.color = '#666';
+            }
+            if (authStatusBadge) {
+                authStatusBadge.textContent = 'Monitoring...';
+                authStatusBadge.style.background = '#e3f2fd';
+                authStatusBadge.style.color = '#1565c0';
+            }
+            if (securityAlertWarning) {
+                securityAlertWarning.style.display = 'none';
+            }
+            return;
+        }
+
+        // Draw primary face bounding box with authoritative category
+        const primaryFace = detectedFaces[0];
+        updateBoundingBox(
+            primaryFace.bbox,
+            videoW,
+            videoH,
+            primaryFace.name,
+            primaryFace.similarity,
+            primaryFace.status,
+            primaryFace.identity_category,
+            primaryFace.box_color,
+            primaryFace.label
+        );
+
+        // Process recognized student for attendance marking
+        detectedFaces.forEach(face => {
+            const category = face.identity_category || 'UNKNOWN_PERSON';
+            if (category === 'REGISTERED_STUDENT') {
+                handleRecognizedStudent(face.name, face.similarity);
+            }
+        });
+    }
+
+    /* ── Bounding Box Overlay Positioning (4 Distinct States) ── */
+    function updateBoundingBox(bbox, videoW, videoH, name, similarity, status, category, boxColor, customLabel) {
+        if (!bbox || bbox.w === 0 || bbox.h === 0 || !faceBox) {
+            if (faceBox) faceBox.style.display = 'none';
+            return;
+        }
+
+        const videoRect = video.getBoundingClientRect();
+        const containerRect = cameraBox.getBoundingClientRect();
+
+        const scaleX = videoRect.width / videoW;
+        const scaleY = videoRect.height / videoH;
+
+        const left   = (videoRect.left - containerRect.left) + (bbox.x * scaleX);
+        const top    = (videoRect.top  - containerRect.top)  + (bbox.y * scaleY);
+        const width  = bbox.w * scaleX;
+        const height = bbox.h * scaleY;
+
+        faceBox.style.left      = `${Math.max(0, left)}px`;
+        faceBox.style.top       = `${Math.max(0, top)}px`;
+        faceBox.style.width     = `${width}px`;
+        faceBox.style.height    = `${height}px`;
+        faceBox.style.transform = 'none';
+        faceBox.style.display   = 'block';
+
+        const pct = Math.round(similarity * 100);
+        let colorCode = '#d82b2b';
+        let labelText = `Unknown Person (${pct}%)`;
+
+        if (category === 'REGISTERED_STUDENT' || boxColor === 'green') {
+            colorCode = '#4da63d'; // Green
+            labelText = `🎓 Registered Student: ${name} (${pct}%)`;
+            if (activeIdentityText) {
+                activeIdentityText.textContent = `${name} (Student)`;
+                activeIdentityText.style.color = '#2e7d32';
+            }
+            if (authStatusBadge) {
+                authStatusBadge.textContent = 'Authorized Student';
+                authStatusBadge.style.background = '#e8f5e9';
+                authStatusBadge.style.color = '#2e7d32';
+            }
+            if (securityAlertWarning) securityAlertWarning.style.display = 'none';
+
+        } else if (category === 'APPROVED_GUEST' || boxColor === 'orange') {
+            colorCode = '#e67e22'; // Orange
+            labelText = `👤 Approved Guest: ${name} (${pct}%)`;
+            if (activeIdentityText) {
+                activeIdentityText.textContent = `${name} (Guest Visitor)`;
+                activeIdentityText.style.color = '#d35400';
+            }
+            if (authStatusBadge) {
+                authStatusBadge.textContent = 'Approved Campus Guest';
+                authStatusBadge.style.background = '#fff3e0';
+                authStatusBadge.style.color = '#e67e22';
+            }
+            if (securityAlertWarning) securityAlertWarning.style.display = 'none';
+
+        } else if (category === 'INCONCLUSIVE' || boxColor === 'yellow') {
+            colorCode = '#d4ac0d'; // Yellow
+            labelText = `❓ Check Required (${pct}%)`;
+            if (activeIdentityText) {
+                activeIdentityText.textContent = 'Unverified Face';
+                activeIdentityText.style.color = '#b7950b';
+            }
+            if (authStatusBadge) {
+                authStatusBadge.textContent = 'Unverified / Check Required';
+                authStatusBadge.style.background = '#fffde7';
+                authStatusBadge.style.color = '#f57f17';
+            }
+            if (securityAlertWarning) securityAlertWarning.style.display = 'none';
+
+        } else {
+            colorCode = '#d82b2b'; // Red
+            labelText = `⚠️ UNKNOWN PERSON: Access Not Authorized`;
+            if (activeIdentityText) {
+                activeIdentityText.textContent = 'Unknown Person';
+                activeIdentityText.style.color = '#c62828';
+            }
+            if (authStatusBadge) {
+                authStatusBadge.textContent = 'ACCESS NOT AUTHORIZED';
+                authStatusBadge.style.background = '#ffebee';
+                authStatusBadge.style.color = '#c62828';
+            }
+            if (securityAlertWarning) {
+                securityAlertWarning.style.display = 'block';
+                securityAlertWarning.textContent = '⚠️ SECURITY ALERT: Unregistered person detected in monitored area.';
+            }
+        }
+
+        if (customLabel) {
+            labelText = customLabel;
+        }
+
+        faceBox.style.borderColor       = colorCode;
+        faceLabel.style.backgroundColor = colorCode;
+        faceLabel.textContent           = labelText;
+    }
+
+    /* ── Student Attendance Marking (Preserves Existing Duplicate Attendance Prevention) ── */
+    async function handleRecognizedStudent(name, similarity) {
+        const lowerName = name.toLowerCase();
+        if (markedStudentsThisSession.has(lowerName)) return;
+
+        markedStudentsThisSession.add(lowerName);
+        try {
+            const resp = await fetch(`${BACKEND_URL}/api/attendance/mark`, {
+                method: 'POST',
+                headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+                body: JSON.stringify({ name: name, similarity: similarity })
+            });
+
+            if (resp.status === 200 || resp.status === 409) {
+                await loadTodayAttendance();
+            }
+        } catch (e) {
+            console.error('[SmartAttendance] Student attendance mark error:', e);
+        }
+    }
+
+    /* ── Live Approved Guests Table on Campus ── */
+    async function loadTeacherGuests() {
+        const tbody = document.getElementById('teacherGuestsBody');
+        if (!tbody) return;
+
+        try {
+            const resp = await fetch(`${BACKEND_URL}/api/guests?status=approved`, {
+                headers: getAuthHeaders()
+            });
+            if (!resp.ok) return;
+
+            const guests = await resp.json();
+            tbody.innerHTML = '';
+
+            if (guests.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="3" class="empty-row-text">No approved guests currently on campus.</td></tr>';
+                return;
+            }
+
+            guests.forEach(g => {
+                const tr = document.createElement('tr');
+                const validStr = g.valid_until ? g.valid_until.replace('T', ' ') : 'End of day';
+                tr.innerHTML = `
+                    <td><strong>${escapeHtml(g.full_name)}</strong><br><small style="color:#666;">ID: ${escapeHtml(g.guest_id)}</small></td>
+                    <td>${escapeHtml(g.purpose)}<br><small style="color:#666;">Host: ${escapeHtml(g.host_to_meet)}</small></td>
+                    <td style="font-size:12px;">${escapeHtml(validStr)}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        } catch (err) {
+            console.error('[SmartAttendance] Load teacher guests error:', err);
+        }
+    }
+
+    /* ── Live Security Events & Unknown Person Alerts Table ── */
+    async function pollTeacherEvents() {
+        const tbody = document.getElementById('teacherSecurityEventsBody');
+        if (!tbody) return;
+
+        try {
+            const resp = await fetch(`${BACKEND_URL}/api/security/events?limit=8`, {
+                headers: getAuthHeaders()
+            });
+            if (!resp.ok) return;
+
+            const events = await resp.json();
+            tbody.innerHTML = '';
+
+            if (!events || events.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="3" class="empty-row-text">No security alerts recorded today.</td></tr>';
+                return;
+            }
+
+            events.forEach(ev => {
+                const tr = document.createElement('tr');
+                const isUnknown = (ev.identity_category || '').includes('UNKNOWN') || (ev.event_type || '').includes('UNKNOWN');
+                const statusBadge = isUnknown
+                    ? `<span style="padding:2px 6px; border-radius:3px; font-size:11px; background:#ffebee; color:#c62828; font-weight:600;">ALERT</span>`
+                    : `<span style="padding:2px 6px; border-radius:3px; font-size:11px; background:#e8f5e9; color:#2e7d32; font-weight:600;">LOGGED</span>`;
+
+                tr.innerHTML = `
+                    <td style="font-size:12px;">${escapeHtml(ev.timestamp ? ev.timestamp.slice(11, 19) : '–')}</td>
+                    <td><strong>${escapeHtml(ev.name || 'Unknown Person')}</strong><br><small style="color:#666;">${escapeHtml(ev.event_type || '')}</small></td>
+                    <td>${statusBadge}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        } catch (err) {
+            // Quiet network fallback
+        }
+    }
+
+    stopBtn.addEventListener('click', stopCamera);
+    window.addEventListener('beforeunload', stopCamera);
+    logoutBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        stopCamera();
+        logout();
+    });
+
+    /* ── Excel Attendance Export ── */
+    function onReportTypeChange() {
+        const type = document.getElementById('excelReportType').value;
+        const monthGroup = document.getElementById('excelMonthGroup');
+        const customGroup = document.getElementById('excelCustomGroup');
+
+        if (type === 'monthly') {
+            monthGroup.style.display = 'block';
+            customGroup.style.display = 'none';
+        } else if (type === 'custom') {
+            monthGroup.style.display = 'none';
+            customGroup.style.display = 'flex';
+        } else { // semester
+            monthGroup.style.display = 'none';
+            customGroup.style.display = 'none';
+        }
+    }
+
+    async function downloadAttendanceExcel() {
+        const type = document.getElementById('excelReportType').value;
+        const statusEl = document.getElementById('excelDownloadStatus');
+        const btn = document.getElementById('downloadExcelBtn');
+
+        let url = `${BACKEND_URL}/api/attendance/export/excel?report_type=${encodeURIComponent(type)}`;
+        if (type === 'monthly') {
+            const m = document.getElementById('excelMonthInput').value;
+            if (m) url += `&month=${encodeURIComponent(m)}`;
+        } else if (type === 'custom') {
+            const s = document.getElementById('excelStartDate').value;
+            const e = document.getElementById('excelEndDate').value;
+            if (s && e && s > e) {
+                statusEl.style.display = 'inline';
+                statusEl.style.color = '#c62828';
+                statusEl.textContent = 'Invalid date range: Start date cannot be after end date.';
+                return;
+            }
+            if (s) url += `&start_date=${encodeURIComponent(s)}`;
+            if (e) url += `&end_date=${encodeURIComponent(e)}`;
+        }
+
+        try {
+            btn.disabled = true;
+            statusEl.style.display = 'inline';
+            statusEl.style.color = '#004085';
+            statusEl.textContent = 'Generating Excel report...';
+
+            const resp = await fetch(url, {
+                headers: getAuthHeaders()
+            });
+
+            if (resp.status === 401) {
+                clearSession();
+                window.location.replace('index.html?session_expired=1');
+                return;
+            }
+            if (resp.status === 403) {
+                statusEl.style.color = '#c62828';
+                statusEl.textContent = 'Access forbidden. Teacher/Admin role required.';
+                return;
+            }
+            if (!resp.ok) {
+                const errData = await resp.json().catch(() => ({}));
+                statusEl.style.color = '#c62828';
+                statusEl.textContent = errData.detail || 'Download failed.';
+                return;
+            }
+
+            const blob = await resp.blob();
+            let filename = `SmartAttendance_${type}_report.xlsx`;
+            const disposition = resp.headers.get('Content-Disposition');
+            if (disposition && disposition.indexOf('filename=') !== -1) {
+                const matches = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/.exec(disposition);
+                if (matches != null && matches[1]) {
+                    filename = matches[1].replace(/['"]/g, '');
+                }
+            }
+
+            const blobUrl = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = blobUrl;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(blobUrl);
+
+            statusEl.style.color = '#2e7d32';
+            statusEl.textContent = '✓ Download complete!';
+            setTimeout(() => { statusEl.style.display = 'none'; }, 4000);
+        } catch (err) {
+            console.error('[SmartAttendance] Excel download error:', err);
+            statusEl.style.color = '#c62828';
+            statusEl.textContent = 'Network error downloading report.';
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+    /* ── Initial Load with Auth Validation ── */
+    async function init() {
+        currentUser = await requireAuth(['teacher', 'admin']);
+        if (!currentUser) return; // Handled by requireAuth
+
+        // Update header label with authenticated name
+        const headerEl = document.getElementById('teacherNameHeader');
+        if (headerEl) {
+            if (currentUser.role === 'admin') {
+                headerEl.textContent = `Admin (${currentUser.username})`;
+            } else {
+                headerEl.textContent = currentUser.username.charAt(0).toUpperCase() + currentUser.username.slice(1);
+            }
+        }
+
+        // Initialize Excel month selector to current YYYY-MM
+        const mInput = document.getElementById('excelMonthInput');
+        if (mInput && !mInput.value) {
+            const d = new Date();
+            const y = d.getFullYear();
+            const mo = String(d.getMonth() + 1).padStart(2, '0');
+            mInput.value = `${y}-${mo}`;
+        }
+
+        checkBackendHealth();
+        loadTodayAttendance();
+        loadAttendanceHistory();
+        loadStudents();
+        loadTeacherGuests();
+        pollTeacherEvents();
+
+        // Background poll live events and guest updates every 4s
+        if (eventsPollInterval) clearInterval(eventsPollInterval);
+        eventsPollInterval = setInterval(() => {
+            pollTeacherEvents();
+            loadTeacherGuests();
+        }, 4000);
+    }
+
+    init();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,1055 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Security Dashboard – SmartAttendance</title>
+    <meta name="description" content="Gate security monitoring: live camera feed, real-time AI face recognition, and attendance tracking.">
+    <link rel="stylesheet" href="shared.css">
+    <style>
+        .two-col {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 20px;
+        }
+        .card h2 { color: #333; }
+
+        /* Stats panel in right column */
+        .status-stats { grid-template-columns: 1fr; }
+        .stat-box span { font-size: 24px; color: #333; }
+        .stat-box label { font-size: 12px; text-transform: uppercase; }
+
+        /* Real-time face overlay box */
+        .mock-box {
+            position: absolute;
+            border: 2px solid #4da63d;
+            display: none;
+            pointer-events: none;
+            transition: all 0.12s ease-out;
+            box-sizing: border-box;
+            z-index: 5;
+        }
+        .mock-label {
+            position: absolute;
+            top: -24px;
+            left: -2px;
+            background: #4da63d;
+            color: white;
+            padding: 2px 8px;
+            font-size: 12px;
+            font-weight: bold;
+            border-radius: 2px;
+            white-space: nowrap;
+        }
+
+        .camera-controls {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+        }
+
+        /* Scrollable event / alert tables */
+        .table-container { max-height: 300px; overflow-y: auto; }
+        th { position: sticky; top: 0; background: #f8f9fa; z-index: 2; }
+
+        .unknown-img {
+            width: 44px;
+            height: 44px;
+            background-color: #222;
+            border-radius: 4px;
+            object-fit: cover;
+            border: 1px solid #444;
+            display: block;
+        }
+
+        /* Backend connectivity banner */
+        .backend-banner {
+            border-radius: 6px;
+            padding: 9px 14px;
+            font-size: 13px;
+            margin-bottom: 14px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 500;
+        }
+        .backend-banner.connected {
+            background: #e8f5e9;
+            border: 1px solid #81c784;
+            color: #2e7d32;
+        }
+        .backend-banner.disconnected {
+            background: #ffebee;
+            border: 1px solid #ef5350;
+            color: #c62828;
+        }
+        .backend-banner.checking {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            color: #856404;
+        }
+
+        .empty-row-text {
+            text-align: center;
+            color: #888;
+            padding: 20px 10px;
+        }
+
+        .badge-session {
+            display: inline-block;
+            padding: 2px 6px;
+            font-size: 11px;
+            font-weight: bold;
+            border-radius: 3px;
+            background: #e3f2fd;
+            color: #1976d2;
+            margin-left: 6px;
+        }
+
+        @media (max-width: 900px) {
+            .two-col { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- Dark header for security page -->
+<div class="header header--dark">
+    <h1>Security Dashboard</h1>
+    <div style="display:flex; align-items:center; gap:15px;">
+        <span style="color:white; font-weight:bold;">Security Officer</span>
+        <a href="index.html" class="logout-btn" id="logoutBtn">Logout</a>
+    </div>
+</div>
+
+<div class="container two-col">
+
+    <!-- ── Left column ───────────────────────────────────── -->
+    <div class="left-column">
+
+        <!-- Camera feed -->
+        <div class="card">
+            <h2>Live Camera Monitor</h2>
+
+            <div class="backend-banner checking" id="backendBanner">
+                <span id="backendBannerIcon">⏳</span>
+                <span id="backendBannerText">Connecting to backend at http://127.0.0.1:8000...</span>
+            </div>
+
+            <div class="camera-container" id="cameraBox">
+                <span id="cameraPlaceholder">Camera Inactive</span>
+                <video id="videoElement" autoplay playsinline muted aria-label="Gate camera feed"></video>
+                
+                <!-- Face-bounding-box overlay -->
+                <div class="mock-box" id="faceBox" aria-hidden="true">
+                    <div class="mock-label" id="faceLabel">Scanning…</div>
+                </div>
+
+                <!-- In-page camera error panel (hidden by default) -->
+                <div id="cameraError" style="
+                    display:none;
+                    position:absolute; inset:0;
+                    background:rgba(0,0,0,0.85);
+                    color:#fff;
+                    flex-direction:column;
+                    align-items:center;
+                    justify-content:center;
+                    text-align:center;
+                    padding:20px;
+                    gap:10px;
+                    border-radius:8px;
+                    z-index:10;
+                ">
+                    <div style="font-size:2rem;">📷</div>
+                    <div id="cameraErrorTitle" style="font-size:1.1rem; font-weight:bold; color:#f87171;"></div>
+                    <div id="cameraErrorMsg"  style="font-size:0.85rem; color:#d1d5db; line-height:1.5;"></div>
+                    <button onclick="hideCameraError()" style="
+                        margin-top:8px; padding:6px 16px;
+                        background:#4da63d; border:none; border-radius:4px;
+                        color:white; cursor:pointer; font-size:13px;
+                    ">Dismiss</button>
+                </div>
+            </div>
+
+            <div class="camera-controls">
+                <button class="btn btn-start" id="startCamBtn">Activate Camera</button>
+                <button class="btn btn-stop"  id="stopCamBtn" style="display:none;">Deactivate Camera</button>
+            </div>
+        </div>
+
+        <!-- Recent events table -->
+        <div class="card">
+            <h2>Recent Recognition Events</h2>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th scope="col">Time</th>
+                            <th scope="col">Date</th>
+                            <th scope="col">Person Detected</th>
+                            <th scope="col">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="recentEventsBody">
+                        <tr><td colspan="4" class="empty-row-text">Loading events from database...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Right column ──────────────────────────────────── -->
+    <div class="right-column">
+
+        <!-- Status counters -->
+        <div class="card">
+            <h2>Status</h2>
+            <div class="stats-grid status-stats">
+                <div class="stat-box">
+                    <span id="camStatusText" style="color:#666;">Inactive</span>
+                    <label>Camera Status</label>
+                </div>
+                <div class="stat-box">
+                    <span id="recognizedCount" style="color:#4da63d;">0</span>
+                    <label>Gate Observations Today</label>
+                </div>
+                <div class="stat-box">
+                    <span id="unknownCount" style="color:#d82b2b;">0</span>
+                    <label>Unknown Faces (Session)</label>
+                </div>
+            </div>
+        </div>
+
+        <!-- Unknown-face alerts table -->
+        <div class="card">
+            <h2>Unknown Face Detections</h2>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th scope="col">Snapshot</th>
+                            <th scope="col">Time / Date</th>
+                            <th scope="col">Status</th>
+                            <th scope="col">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="unknownFacesBody">
+                        <tr id="noAlertsRow"><td colspan="4" class="empty-row-text">No unknown faces detected yet.</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Guest Registration Card -->
+        <div class="card" id="guestRegCard" style="margin-top:20px;">
+            <h2 style="color:#2b6099; border-bottom:1px solid #eee; padding-bottom:10px;">Register & Approve Guest</h2>
+            <p style="font-size:13px; color:#666; margin-top:-5px; margin-bottom:15px;">
+                Select an unknown face snapshot from above or upload a face image to approve a guest pass.
+            </p>
+
+            <div id="guestRegAlert" style="display:none; padding:10px 14px; border-radius:4px; font-size:13px; margin-bottom:15px; font-weight:500;"></div>
+
+            <form id="guestRegForm" novalidate>
+                <div style="display:flex; gap:15px; align-items:center; margin-bottom:15px; background:#f8f9fa; padding:12px; border-radius:6px; border:1px solid #e9ecef;">
+                    <div id="guestFacePreviewBox" style="width:68px; height:68px; border-radius:4px; background:#e0e0e0; display:flex; align-items:center; justify-content:center; overflow:hidden; border:1px solid #ccc; flex-shrink:0;">
+                        <img id="guestFacePreview" src="" alt="Guest face preview" style="width:100%; height:100%; object-fit:cover; display:none;">
+                        <span id="guestFacePlaceholder" style="font-size:24px; color:#888;">👤</span>
+                    </div>
+                    <div style="flex-grow:1;">
+                        <div style="font-weight:600; font-size:13px; color:#333;" id="guestFaceStatus">No face selected</div>
+                        <div style="font-size:12px; color:#666; margin-top:2px;">Click "Register" on an unknown detection above</div>
+                        <input type="hidden" id="guestImageBase64">
+                    </div>
+                </div>
+
+                <div class="form-group" style="margin-bottom:12px;">
+                    <label style="display:block; font-size:12px; font-weight:600; color:#555; margin-bottom:4px;">Guest Full Name *</label>
+                    <input type="text" id="guestFullName" placeholder="e.g. Dr. Rajesh Gupta" required style="width:100%; padding:8px 10px; border:1px solid #ccc; border-radius:4px; font-size:14px; box-sizing:border-box;">
+                </div>
+
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:12px;">
+                    <div>
+                        <label style="display:block; font-size:12px; font-weight:600; color:#555; margin-bottom:4px;">Purpose of Visit *</label>
+                        <input type="text" id="guestPurpose" placeholder="e.g. Guest Lecture / Campus Visit" required style="width:100%; padding:8px 10px; border:1px solid #ccc; border-radius:4px; font-size:14px; box-sizing:border-box;">
+                    </div>
+                    <div>
+                        <label style="display:block; font-size:12px; font-weight:600; color:#555; margin-bottom:4px;">Host / Person to Meet *</label>
+                        <input type="text" id="guestHost" placeholder="e.g. Prof. Deshmukh" required style="width:100%; padding:8px 10px; border:1px solid #ccc; border-radius:4px; font-size:14px; box-sizing:border-box;">
+                    </div>
+                </div>
+
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:15px;">
+                    <div>
+                        <label style="display:block; font-size:12px; font-weight:600; color:#555; margin-bottom:4px;">Contact Phone</label>
+                        <input type="tel" id="guestPhone" placeholder="e.g. +91 9876543210" style="width:100%; padding:8px 10px; border:1px solid #ccc; border-radius:4px; font-size:14px; box-sizing:border-box;">
+                    </div>
+                    <div>
+                        <label style="display:block; font-size:12px; font-weight:600; color:#555; margin-bottom:4px;">Pass Valid Until</label>
+                        <input type="datetime-local" id="guestValidUntil" style="width:100%; padding:8px 10px; border:1px solid #ccc; border-radius:4px; font-size:13px; box-sizing:border-box;">
+                    </div>
+                </div>
+
+                <button type="submit" class="btn btn-start" id="guestSubmitBtn" style="width:100%; padding:10px; font-size:14px;">Register & Approve Guest</button>
+            </form>
+        </div>
+
+        <!-- Active Approved Guests Table Card -->
+        <div class="card" id="approvedGuestsCard" style="margin-top:20px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; border-bottom:1px solid #eee; padding-bottom:8px;">
+                <h2 style="margin:0; border-bottom:none; padding-bottom:0;">Approved Guests (Active)</h2>
+                <button type="button" class="btn btn-view" style="font-size:12px; padding:5px 10px;" onclick="loadGuests()">Refresh</button>
+            </div>
+            <div class="table-container" style="max-height:220px; overflow-y:auto;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th scope="col">ID / Photo</th>
+                            <th scope="col">Guest Name</th>
+                            <th scope="col">Host & Purpose</th>
+                            <th scope="col">Valid Until</th>
+                            <th scope="col">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="approvedGuestsBody">
+                        <tr id="noGuestsRow"><td colspan="5" class="empty-row-text">No active approved guests currently registered.</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div><!-- /container -->
+
+<script src="auth.js"></script>
+<script>
+    /* ── Configuration ── (all timing in milliseconds/seconds) */
+    const RECOGNITION_INTERVAL_MS   = 1400;  // Webcam frame analysis interval (ms)
+    const CAMERA_ID                  = 'gate_webcam'; // Camera identifier — sent to backend for per-camera deduplication
+
+    /* ── DOM refs ── */
+    const startBtn       = document.getElementById('startCamBtn');
+    const stopBtn        = document.getElementById('stopCamBtn');
+    const video          = document.getElementById('videoElement');
+    const placeholder    = document.getElementById('cameraPlaceholder');
+    const cameraBox      = document.getElementById('cameraBox');
+    const faceBox        = document.getElementById('faceBox');
+    const faceLabel      = document.getElementById('faceLabel');
+    const backendBanner  = document.getElementById('backendBanner');
+    const backendBannerIcon = document.getElementById('backendBannerIcon');
+    const backendBannerText = document.getElementById('backendBannerText');
+    const logoutBtn      = document.getElementById('logoutBtn');
+
+    /* ── State ── */
+    let currentUser         = null;
+    let mediaStream         = null;
+    let recognitionInterval = null;
+    let isProcessingFrame   = false;
+    let backendReady        = false;
+    let todayAttendanceCount= 0;  // unique attendance records from DB
+    let unknownSessionCount = 0;  // unique unknown-person EVENTS (not raw frames)
+    // Set of student names/roll_nos already marked present in this session.
+    // Guards against duplicate /api/attendance/mark requests from the frontend.
+    const markedStudentsThisSession = new Set();
+    // Set of event row keys already shown in tables — prevents duplicate DOM rows
+    // when polled data overlaps with live detections.
+    const shownEventKeys = new Set();
+
+    // Hidden canvas for video frame extraction
+    const captureCanvas = document.createElement('canvas');
+
+    /* ── Normalize URL: redirect from [::] to localhost if needed ── */
+    if (window.location.hostname === '::' || window.location.hostname === '[::]') {
+        const portStr = window.location.port ? `:${window.location.port}` : '';
+        window.location.replace(`http://localhost${portStr}${window.location.pathname}${window.location.search}`);
+    }
+
+    /* ── Check Backend Status ── */
+    async function checkBackendHealth() {
+        try {
+            const resp = await fetch(`${BACKEND_URL}/api/health`, { method: 'GET' });
+            if (resp.ok) {
+                const health = await resp.json();
+                backendReady = health.status === 'ok' && health.ml_ready;
+                backendBanner.className = 'backend-banner connected';
+                backendBannerIcon.textContent = '🟢';
+                backendBannerText.textContent = `Backend Online: YuNet Detector & SFace Recognizer loaded (${health.total_students} students registered)`;
+                return true;
+            } else {
+                throw new Error(`HTTP ${resp.status}`);
+            }
+        } catch (err) {
+            backendReady = false;
+            backendBanner.className = 'backend-banner disconnected';
+            backendBannerIcon.textContent = '⚠️';
+            backendBannerText.innerHTML = `Backend offline at <code>${BACKEND_URL}</code>. Start with: <code>./.venv/bin/python3 run.py</code> in <code>backend/</code>.`;
+            return false;
+        }
+    }
+
+    /* ── Load Gate Observations & Security Events from Backend ── */
+    async function loadGateSecurityEvents() {
+        try {
+            const resp = await fetch(`${BACKEND_URL}/api/security/events?limit=30`, {
+                headers: getAuthHeaders()
+            });
+            if (handleAuthResponseError(resp)) return;
+            if (resp.ok) {
+                const events = await resp.json();
+                const gateEvents = events.filter(e => e.event_type === 'GATE_OBSERVATION' || e.event_type === 'UNKNOWN_ALERT');
+                todayAttendanceCount = gateEvents.length;
+                document.getElementById('recognizedCount').textContent = todayAttendanceCount;
+
+                // Track observed identities in this session
+                gateEvents.forEach(e => {
+                    if (e.name) markedStudentsThisSession.add(e.name.toLowerCase());
+                });
+
+                const tbody = document.getElementById('recentEventsBody');
+                tbody.innerHTML = '';
+                if (gateEvents.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="4" class="empty-row-text">No gate observations recorded today yet. Activate camera to start.</td></tr>';
+                } else {
+                    gateEvents.forEach(e => {
+                        const simStr = e.similarity ? ` (${Math.round(e.similarity * 100)}%)` : '';
+                        const dateStr = e.timestamp ? e.timestamp.split(' ')[0] : '';
+                        const timeStr = e.timestamp ? e.timestamp.split(' ')[1] : '';
+                        let statusText = 'Known Student — Gate Observation';
+                        let statusClass = 'status-recognized';
+                        if (e.event_type === 'UNKNOWN_ALERT') {
+                            statusText = 'Security Alert (Unknown)';
+                            statusClass = 'status-unknown';
+                        } else if (e.identity_category === 'GUEST') {
+                            statusText = 'Approved Guest Pass';
+                            statusClass = 'status-present';
+                        }
+                        addRecentEventRow(timeStr, dateStr, `${e.name}${simStr}`, statusText, statusClass, false);
+                    });
+                }
+            }
+        } catch (err) {
+            console.error('[SmartAttendance] Could not load gate observations:', err);
+            const tbody = document.getElementById('recentEventsBody');
+            tbody.innerHTML = '<tr><td colspan="4" class="empty-row-text">Could not load gate records from backend.</td></tr>';
+        }
+    }
+
+    /* ── Camera Error Helpers ── */
+    function showCameraError(title, msg) {
+        const box = document.getElementById('cameraError');
+        document.getElementById('cameraErrorTitle').textContent = title;
+        document.getElementById('cameraErrorMsg').innerHTML     = msg;
+        box.style.display = 'flex';
+        placeholder.style.display = 'none';
+    }
+    function hideCameraError() {
+        document.getElementById('cameraError').style.display = 'none';
+        placeholder.style.display = 'block';
+    }
+
+    /* ── Start Camera ── */
+    startBtn.addEventListener('click', async () => {
+        hideCameraError();
+
+        // Ensure backend status is fresh
+        await checkBackendHealth();
+
+        // Secure-context check
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            showCameraError(
+                'Camera API Unavailable',
+                'Browser camera access requires a <strong>secure context</strong>.<br><br>' +
+                'Make sure you open <code>http://localhost:8080/security_dashboard.html</code> ' +
+                '(not a <code>file://</code> URL or <code>[::]</code> host).<br><br>' +
+                'Current origin: <code>' + window.location.origin + '</code>'
+            );
+            return;
+        }
+
+        try {
+            mediaStream = await navigator.mediaDevices.getUserMedia({
+                video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' },
+                audio: false
+            });
+            video.srcObject = mediaStream;
+            video.style.display = 'block';
+            placeholder.style.display = 'none';
+            startBtn.style.display = 'none';
+            stopBtn.style.display = 'block';
+            document.getElementById('camStatusText').textContent = 'Monitoring';
+            document.getElementById('camStatusText').style.color = '#4da63d';
+
+            // Wait until video is playing before starting recognition loop
+            video.onloadedmetadata = () => {
+                video.play();
+                startRecognitionLoop();
+            };
+
+        } catch (err) {
+            console.error('[SmartAttendance] Security camera error:', err.name, err.message);
+
+            let title, msg;
+            switch (err.name) {
+                case 'NotAllowedError':
+                case 'PermissionDeniedError':
+                    title = 'Camera Permission Denied';
+                    msg   = 'The browser blocked camera access for this site.<br><br>' +
+                            '<strong>To fix:</strong><br>' +
+                            '1. Click the <strong>🔒 or 📷</strong> icon in the browser address bar<br>' +
+                            '2. Set <em>Camera</em> to <strong>Allow</strong><br>' +
+                            '3. Reload this page (<code>http://localhost:8080</code>)<br><br>' +
+                            '<strong>macOS check:</strong> System Settings → Privacy & Security → Camera → Enable your browser.';
+                    break;
+                case 'NotFoundError':
+                case 'DevicesNotFoundError':
+                    title = 'No Camera Found';
+                    msg   = 'No webcam detected on this machine. Check your camera connection or privacy cover.';
+                    break;
+                case 'NotReadableError':
+                case 'TrackStartError':
+                    title = 'Camera Already in Use';
+                    msg   = 'Another app is currently using the camera.<br><br>' +
+                            'Please close FaceTime, Zoom, Teams, or any running Python webcam script.';
+                    break;
+                default:
+                    title = 'Camera Error (' + err.name + ')';
+                    msg   = err.message || 'Unknown camera initialization error.';
+            }
+            showCameraError(title, msg);
+        }
+    });
+
+    /* ── Stop Camera ── */
+    function stopCamera() {
+        if (recognitionInterval) {
+            clearInterval(recognitionInterval);
+            recognitionInterval = null;
+        }
+        isProcessingFrame = false;
+
+        if (mediaStream) {
+            mediaStream.getTracks().forEach(t => t.stop());
+            mediaStream = null;
+        }
+        video.srcObject = null;
+        video.style.display       = 'none';
+        placeholder.style.display = 'block';
+        startBtn.style.display    = 'block';
+        stopBtn.style.display     = 'none';
+        faceBox.style.display     = 'none';
+        document.getElementById('camStatusText').textContent = 'Inactive';
+        document.getElementById('camStatusText').style.color = '#666';
+    }
+
+    stopBtn.addEventListener('click', stopCamera);
+
+    // Stop tracks on page unload or logout
+    window.addEventListener('beforeunload', stopCamera);
+    logoutBtn.addEventListener('click', stopCamera);
+
+    /* ── Real Webcam Recognition Loop ── */
+    function startRecognitionLoop() {
+        if (recognitionInterval) clearInterval(recognitionInterval);
+        recognitionInterval = setInterval(processWebcamFrame, RECOGNITION_INTERVAL_MS);
+    }
+
+    async function processWebcamFrame() {
+        if (!mediaStream || isProcessingFrame || video.paused || video.ended || !video.videoWidth) {
+            return;
+        }
+
+        isProcessingFrame = true;
+
+        try {
+            // Draw current video frame to canvas
+            const vw = video.videoWidth;
+            const vh = video.videoHeight;
+            captureCanvas.width  = vw;
+            captureCanvas.height = vh;
+            const ctx = captureCanvas.getContext('2d');
+            ctx.drawImage(video, 0, 0, vw, vh);
+
+            // Convert canvas frame to JPEG Blob
+            const blob = await new Promise(resolve => captureCanvas.toBlob(resolve, 'image/jpeg', 0.85));
+            if (!blob) {
+                isProcessingFrame = false;
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', blob, 'webcam_frame.jpg');
+
+            const resp = await fetch(`${BACKEND_URL}/api/recognize?camera_id=${encodeURIComponent(CAMERA_ID)}`, {
+                method: 'POST',
+                headers: getAuthHeaders(),
+                body: formData,
+            });
+
+            if (resp.status === 401) {
+                stopCamera();
+                clearSession();
+                window.location.replace('index.html?session_expired=1');
+                return;
+            }
+            if (resp.status === 403) {
+                console.error('[SmartAttendance] 403 Forbidden on /api/recognize');
+                stopCamera();
+                alert('Access Denied (403): You do not have permission to run face recognition.');
+                return;
+            }
+
+            if (!resp.ok) {
+                console.warn(`[SmartAttendance] /api/recognize returned HTTP ${resp.status}`);
+                isProcessingFrame = false;
+                return;
+            }
+
+            const data = await resp.json();
+            handleRecognitionResults(data, vw, vh);
+
+        } catch (err) {
+            console.error('[SmartAttendance] Recognition frame network error:', err);
+        } finally {
+            isProcessingFrame = false;
+        }
+    }
+
+    /* ── Handle Recognition Results from ML Backend ── */
+    function handleRecognitionResults(data, videoW, videoH) {
+        const now = new Date();
+        const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        const dateStr = now.toISOString().split('T')[0];
+
+        const results = data.results || [];
+        const detectedFaces = results.filter(r => r.status !== 'NO_FACE');
+
+        if (detectedFaces.length === 0) {
+            faceBox.style.display = 'none';
+            return;
+        }
+
+        // Display bounding box for the first prominent detected face
+        const primaryFace = detectedFaces[0];
+        updateBoundingBox(
+            primaryFace.bbox,
+            videoW,
+            videoH,
+            primaryFace.name,
+            primaryFace.similarity,
+            primaryFace.status,
+            primaryFace.identity_category,
+            primaryFace.box_color,
+            primaryFace.label
+        );
+
+        // Process each detected face based on authoritative backend category
+        detectedFaces.forEach(face => {
+            const category = face.identity_category || 'UNKNOWN_PERSON';
+            const name = face.name;
+            const simScore = face.similarity;
+
+            if (category === 'REGISTERED_STUDENT') {
+                handleRecognizedFace(name, simScore, timeStr, dateStr);
+            } else if (category === 'APPROVED_GUEST') {
+                handleApprovedGuest(name, face.guest_id, simScore, timeStr, dateStr);
+            } else if (category === 'INCONCLUSIVE') {
+                handleInconclusiveFace(simScore, timeStr, dateStr);
+            } else {
+                handleUnknownFace(simScore, timeStr, dateStr, face.bbox);
+            }
+        });
+    }
+
+    /* ── Bounding Box Overlay Positioning (4 Distinct States) ── */
+    function updateBoundingBox(bbox, videoW, videoH, name, similarity, status, category, boxColor, customLabel) {
+        if (!bbox || bbox.w === 0 || bbox.h === 0) {
+            faceBox.style.display = 'none';
+            return;
+        }
+
+        const videoRect = video.getBoundingClientRect();
+        const containerRect = cameraBox.getBoundingClientRect();
+
+        const scaleX = videoRect.width / videoW;
+        const scaleY = videoRect.height / videoH;
+
+        const left   = (videoRect.left - containerRect.left) + (bbox.x * scaleX);
+        const top    = (videoRect.top  - containerRect.top)  + (bbox.y * scaleY);
+        const width  = bbox.w * scaleX;
+        const height = bbox.h * scaleY;
+
+        faceBox.style.left      = `${Math.max(0, left)}px`;
+        faceBox.style.top       = `${Math.max(0, top)}px`;
+        faceBox.style.width     = `${width}px`;
+        faceBox.style.height    = `${height}px`;
+        faceBox.style.transform = 'none';
+        faceBox.style.display   = 'block';
+
+        const pct = Math.round(similarity * 100);
+
+        let colorCode = '#d82b2b'; // default red
+        let labelText = `Unknown Person (${pct}%)`;
+
+        if (category === 'REGISTERED_STUDENT' || boxColor === 'green') {
+            colorCode = '#4da63d';
+            labelText = `🎓 KNOWN STUDENT — GATE OBSERVATION (${pct}%)`;
+        } else if (category === 'APPROVED_GUEST' || boxColor === 'orange') {
+            colorCode = '#e67e22'; // distinct vibrant orange
+            labelText = `👤 APPROVED GUEST: ${name} (${pct}%)`;
+        } else if (category === 'INCONCLUSIVE' || boxColor === 'yellow') {
+            colorCode = '#d4ac0d';
+            labelText = `❓ Check Required (${pct}%)`;
+        } else {
+            colorCode = '#d82b2b';
+            labelText = `⚠️ UNKNOWN: Access Not Authorized`;
+        }
+
+        if (customLabel) {
+            labelText = customLabel;
+        }
+
+        faceBox.style.borderColor       = colorCode;
+        faceLabel.style.backgroundColor = colorCode;
+        faceLabel.textContent           = labelText;
+    }
+
+    /* ── Registered Student: Campus Gate Observation (NEVER Marks Classroom Attendance) ── */
+    function handleRecognizedFace(name, similarity, timeStr, dateStr) {
+        const lowerName = name.toLowerCase();
+
+        if (!markedStudentsThisSession.has(lowerName)) {
+            markedStudentsThisSession.add(lowerName);
+            todayAttendanceCount++;
+            document.getElementById('recognizedCount').textContent = todayAttendanceCount;
+
+            const pct = Math.round(similarity * 100);
+            addRecentEventRow(timeStr, dateStr, `Student: ${name} (${pct}%)`, 'Known Student — Gate Observation', 'status-recognized', true);
+        }
+    }
+
+    /* ── Approved Guest Recognized: Audit Entry (Never Marks Student Attendance) ── */
+    function handleApprovedGuest(name, guestId, similarity, timeStr, dateStr) {
+        const key = `${guestId || name}_${timeStr.slice(0, 5)}`;
+        if (!markedStudentsThisSession.has(key)) {
+            markedStudentsThisSession.add(key);
+            addRecentEventRow(timeStr, dateStr, `Guest: ${name}`, 'Approved Guest Pass', 'status-present', true);
+        }
+    }
+
+    /* ── Inconclusive Face Detected ── */
+    function handleInconclusiveFace(similarity, timeStr, dateStr) {
+        // Cooldown notification in events table
+        const key = `inconclusive_${timeStr.slice(0, 5)}`;
+        if (!markedStudentsThisSession.has(key)) {
+            markedStudentsThisSession.add(key);
+            addRecentEventRow(timeStr, dateStr, 'Unverified Face', 'Check Required', 'status-unknown', true);
+        }
+    }
+
+    /* ── Unknown Face: Log Alert & Capture Thumbnail for Registration ── */
+    // Throttle key: one DOM row per ~1-minute window per camera session
+    let _lastUnknownRowMinute = '';
+    function handleUnknownFace(similarity, timeStr, dateStr, bbox) {
+        // Only add ONE unknown row per minute-window in this session
+        const minuteKey = `${dateStr}:${timeStr.slice(0, 5)}`;
+        if (!shownEventKeys.has(minuteKey)) {
+            shownEventKeys.add(minuteKey);
+            unknownSessionCount++;
+            document.getElementById('unknownCount').textContent = unknownSessionCount;
+
+            const pct = Math.round(similarity * 100);
+            addRecentEventRow(timeStr, dateStr, `Unknown Person (${pct}%)`, 'Investigate Presence', 'status-unknown', true);
+
+            // Crop detected face area if bbox available, otherwise use full frame
+            let thumbUrl = '';
+            if (bbox && bbox.w > 20 && bbox.h > 20) {
+                const cropCanvas = document.createElement('canvas');
+                cropCanvas.width = 120;
+                cropCanvas.height = 120;
+                const ctx = cropCanvas.getContext('2d');
+                const padX = bbox.w * 0.2;
+                const padY = bbox.h * 0.2;
+                const sx = Math.max(0, bbox.x - padX);
+                const sy = Math.max(0, bbox.y - padY);
+                const sw = Math.min(captureCanvas.width - sx, bbox.w + (padX * 2));
+                const sh = Math.min(captureCanvas.height - sy, bbox.h + (padY * 2));
+                ctx.drawImage(captureCanvas, sx, sy, sw, sh, 0, 0, 120, 120);
+                thumbUrl = cropCanvas.toDataURL('image/jpeg', 0.85);
+            } else {
+                thumbUrl = captureCanvas.toDataURL('image/jpeg', 0.6);
+            }
+
+            addUnknownAlertRow(timeStr, dateStr, thumbUrl, pct);
+        }
+        // Regardless, bounding box continues updating on every frame (caller handles that)
+    }
+
+    /* ── Select Unknown Face into Guest Registration Form ── */
+    function selectUnknownFaceForRegistration(imgDataUrl, timeStr) {
+        document.getElementById('guestImageBase64').value = imgDataUrl;
+        const preview = document.getElementById('guestFacePreview');
+        const placeholder = document.getElementById('guestFacePlaceholder');
+        preview.src = imgDataUrl;
+        preview.style.display = 'block';
+        placeholder.style.display = 'none';
+
+        const statusEl = document.getElementById('guestFaceStatus');
+        statusEl.textContent = `Selected Capture (${timeStr || 'live'})`;
+        statusEl.style.color = '#2e7d32';
+
+        // Set default validity to today 23:59:59
+        const now = new Date();
+        const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59);
+        const pad = n => String(n).padStart(2, '0');
+        const defaultValidUntil = `${endOfDay.getFullYear()}-${pad(endOfDay.getMonth()+1)}-${pad(endOfDay.getDate())}T${pad(endOfDay.getHours())}:${pad(endOfDay.getMinutes())}`;
+        document.getElementById('guestValidUntil').value = defaultValidUntil;
+
+        // Smooth scroll to guest registration card
+        document.getElementById('guestRegCard').scrollIntoView({ behavior: 'smooth' });
+        document.getElementById('guestFullName').focus();
+    }
+
+    /* ── Guest Registration Form Submission ── */
+    document.getElementById('guestRegForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+
+        const alertBox = document.getElementById('guestRegAlert');
+        const submitBtn = document.getElementById('guestSubmitBtn');
+        alertBox.style.display = 'none';
+
+        const fullName = document.getElementById('guestFullName').value.trim();
+        const purpose = document.getElementById('guestPurpose').value.trim();
+        const host = document.getElementById('guestHost').value.trim();
+        const phone = document.getElementById('guestPhone').value.trim();
+        const validUntil = document.getElementById('guestValidUntil').value;
+        const imageBase64 = document.getElementById('guestImageBase64').value;
+
+        if (!imageBase64) {
+            showAlert(alertBox, 'Please select an unknown face detection above to attach to this guest pass.', 'error');
+            return;
+        }
+        if (!fullName || !purpose || !host) {
+            showAlert(alertBox, 'Full Name, Purpose, and Host are required fields.', 'error');
+            return;
+        }
+
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Registering & Approving Guest…';
+
+        try {
+            const resp = await fetch(`${BACKEND_URL}/api/guests/register`, {
+                method: 'POST',
+                headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+                body: JSON.stringify({
+                    full_name: fullName,
+                    purpose: purpose,
+                    host_to_meet: host,
+                    phone: phone,
+                    valid_until: validUntil ? validUntil + ':00' : null,
+                    image_base64: imageBase64
+                })
+            });
+
+            const data = await resp.json().catch(() => ({}));
+
+            if (!resp.ok) {
+                showAlert(alertBox, data.detail || 'Failed to register guest pass. Please try again.', 'error');
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Register & Approve Guest';
+                return;
+            }
+
+            showAlert(alertBox, `✅ Guest pass approved for ${data.full_name}! Guest ID: ${data.guest_id}`, 'success');
+
+            // Reset form
+            document.getElementById('guestRegForm').reset();
+            document.getElementById('guestImageBase64').value = '';
+            document.getElementById('guestFacePreview').style.display = 'none';
+            document.getElementById('guestFacePlaceholder').style.display = 'block';
+            document.getElementById('guestFaceStatus').textContent = 'No face selected';
+            document.getElementById('guestFaceStatus').style.color = '#333';
+
+            // Refresh approved guests list
+            await loadGuests();
+
+        } catch (err) {
+            console.error('[SmartAttendance] Guest registration error:', err);
+            showAlert(alertBox, 'Network error connecting to backend. Please verify server is online.', 'error');
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Register & Approve Guest';
+        }
+    });
+
+    /* ── Load Active Approved Guests ── */
+    async function loadGuests() {
+        const tbody = document.getElementById('approvedGuestsBody');
+        try {
+            const resp = await fetch(`${BACKEND_URL}/api/guests?status=approved`, {
+                headers: getAuthHeaders()
+            });
+            if (!resp.ok) return;
+
+            const guests = await resp.json();
+            tbody.innerHTML = '';
+
+            if (guests.length === 0) {
+                tbody.innerHTML = '<tr id="noGuestsRow"><td colspan="5" class="empty-row-text">No active approved guests currently registered.</td></tr>';
+                return;
+            }
+
+            guests.forEach(g => {
+                const tr = document.createElement('tr');
+                const photoSrc = g.face_snapshot || 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 36 36"><circle cx="18" cy="18" r="16" fill="%23ddd"/></svg>';
+                const validStr = g.valid_until ? g.valid_until.replace('T', ' ') : 'End of day';
+
+                tr.innerHTML = `
+                    <td style="display:flex; align-items:center; gap:8px;">
+                        <img src="${photoSrc}" style="width:34px; height:34px; border-radius:4px; object-fit:cover; border:1px solid #ccc;">
+                        <span style="font-family:monospace; font-size:11px; color:#555;">${escapeHtml(g.guest_id)}</span>
+                    </td>
+                    <td><strong>${escapeHtml(g.full_name)}</strong><br><small style="color:#666;">${escapeHtml(g.phone || '')}</small></td>
+                    <td>${escapeHtml(g.purpose)}<br><small style="color:#666;">Host: ${escapeHtml(g.host_to_meet)}</small></td>
+                    <td style="font-size:12px;">${escapeHtml(validStr)}</td>
+                    <td>
+                        <button class="btn btn-stop" style="font-size:11px; padding:4px 8px;" onclick="revokeGuestPass('${escapeHtml(g.guest_id)}', '${escapeHtml(g.full_name)}')">Revoke</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        } catch (err) {
+            console.error('[SmartAttendance] Load guests error:', err);
+        }
+    }
+
+    /* ── Revoke Guest Pass ── */
+    async function revokeGuestPass(guestId, guestName) {
+        if (!confirm(`Are you sure you want to revoke the campus visitor pass for ${guestName} (${guestId})?`)) {
+            return;
+        }
+
+        try {
+            const resp = await fetch(`${BACKEND_URL}/api/guests/${guestId}/revoke`, {
+                method: 'POST',
+                headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+                body: JSON.stringify({ reason: 'Revoked by security officer at gate' })
+            });
+
+            if (!resp.ok) {
+                alert('Failed to revoke guest pass.');
+                return;
+            }
+
+            alert(`Guest pass for ${guestName} has been revoked.`);
+            await loadGuests();
+        } catch (err) {
+            console.error('[SmartAttendance] Revoke error:', err);
+            alert('Network error communicating with backend.');
+        }
+    }
+
+    /* ── Helper: Alert Banner ── */
+    function showAlert(el, msg, type) {
+        el.textContent = msg;
+        el.style.display = 'block';
+        if (type === 'success') {
+            el.style.background = '#e8f5e9';
+            el.style.color = '#2e7d32';
+            el.style.border = '1px solid #81c784';
+        } else {
+            el.style.background = '#ffebee';
+            el.style.color = '#c62828';
+            el.style.border = '1px solid #ef5350';
+        }
+    }
+
+    /* ── Table Row Helpers ── */
+    function addRecentEventRow(time, date, person, statusText, statusClass, isLive) {
+        const tbody = document.getElementById('recentEventsBody');
+
+        const emptyRow = tbody.querySelector('.empty-row-text');
+        if (emptyRow) {
+            tbody.removeChild(emptyRow.closest('tr'));
+        }
+
+        const tr = document.createElement('tr');
+        const badge = isLive ? '<span class="badge-session">LIVE</span>' : '';
+        tr.innerHTML = `
+            <td>${time}</td>
+            <td>${date}</td>
+            <td>${person} ${badge}</td>
+            <td class="${statusClass}">${statusText}</td>
+        `;
+        tbody.insertBefore(tr, tbody.firstChild);
+
+        if (tbody.children.length > 25) {
+            tbody.removeChild(tbody.lastChild);
+        }
+    }
+
+    function addUnknownAlertRow(time, date, imgDataUrl, pct) {
+        const tbody = document.getElementById('unknownFacesBody');
+        const noAlerts = document.getElementById('noAlertsRow');
+        if (noAlerts) {
+            noAlerts.remove();
+        }
+
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td><img src="${imgDataUrl}" class="unknown-img" alt="Captured unknown face"></td>
+            <td>${time}<br><small style="color:#666;">${date}</small></td>
+            <td class="status-unknown">Unregistered Face (${pct}%)</td>
+            <td>
+                <button type="button" class="btn btn-view" style="font-size:11px; padding:4px 8px;" onclick="selectUnknownFaceForRegistration('${imgDataUrl}', '${time}')">Register</button>
+            </td>
+        `;
+        tbody.insertBefore(tr, tbody.firstChild);
+
+        if (tbody.children.length > 20) {
+            tbody.removeChild(tbody.lastChild);
+        }
+    }
+
+    /* ── Background Security Event Polling ── */
+    async function pollSecurityEvents() {
+        try {
+            const resp = await fetch(`${BACKEND_URL}/api/security/events?limit=10&unresolved_only=false`, {
+                headers: getAuthHeaders()
+            });
+            if (!resp.ok) return;
+            const events = await resp.json();
+
+            // Update unknownCount badge from real event count (not raw frame count)
+            const unknownAlertEvents = events.filter(ev => ev.event_type === 'UNKNOWN_ALERT');
+            if (unknownAlertEvents.length > 0) {
+                const el = document.getElementById('unknownCount');
+                if (el) el.textContent = unknownAlertEvents.length;
+            }
+        } catch (e) {
+            // Quiet fallback — polling failure is not critical
+        }
+    }
+
+    /* ── Logout Button Handler ── */
+    logoutBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        stopCamera();
+        logout();
+    });
+
+    /* ── Initial Load with Auth Verification ── */
+    async function init() {
+        currentUser = await requireAuth(['security', 'admin']);
+        if (!currentUser) return; // Handled by requireAuth
+
+        await checkBackendHealth();
+        await loadGateSecurityEvents();
+        await loadGuests();
+
+        // Start background security event sync every 4 seconds
+        setInterval(pollSecurityEvents, 4000);
+    }
+
+    init();
+</script>
+
+</body>
+</html>

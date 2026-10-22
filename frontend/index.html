@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SmartAttendance – Login</title>
+    <meta name="description" content="SmartAttendance login portal for Vidyalankar Dnyanapeeth Trust. Select your role and sign in.">
+    <link rel="stylesheet" href="shared.css">
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #ffffff;
+            padding-top: 60px;
+            min-height: 100vh;
+        }
+
+        .logo-container {
+            display: flex;
+            align-items: center;
+            margin-bottom: 25px;
+        }
+        .logo-vdt {
+            font-family: 'Castellar', 'Algerian', 'Georgia', serif;
+            font-size: 64px;
+            font-weight: bold;
+            color: #e57e42;
+            margin-right: 15px;
+            letter-spacing: 1px;
+            -webkit-text-stroke: 1.5px #e57e42;
+            transform: scaleY(1.3);
+            display: inline-block;
+        }
+        .logo-text {
+            color: #e57e42;
+            font-family: 'Segoe UI', Arial, sans-serif;
+            font-size: 18px;
+            line-height: 1.1;
+            border-left: 2px solid #e57e42;
+            padding-left: 10px;
+        }
+
+        .login-card {
+            width: 360px;
+            border: 1px solid #e0e0e0;
+            padding: 40px 50px;
+            background-color: #fff;
+            border-radius: 4px;
+        }
+        .login-card h3 {
+            text-align: center;
+            color: #2b6099;
+            font-weight: 500;
+            font-size: 18px;
+            margin-top: 0;
+            margin-bottom: 30px;
+        }
+        .form-group { margin-bottom: 20px; }
+
+        input[type="text"],
+        input[type="password"],
+        select {
+            width: 100%;
+            padding: 10px 15px;
+            border: 1px solid #dcdcdc;
+            border-radius: 4px;
+            box-sizing: border-box;
+            font-size: 14px;
+            color: #333;
+            outline: none;
+            height: 40px;
+        }
+        input::placeholder { color: #cccccc; }
+        select:invalid    { color: #cccccc; }
+        select option     { color: #333; }
+
+        .login-btn {
+            width: 100%;
+            padding: 10px;
+            background-color: #4da63d;
+            border: none;
+            color: white;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            margin-top: 5px;
+            margin-bottom: 40px;
+            height: 42px;
+        }
+        .login-btn:hover { background-color: #439634; }
+
+        .error-message {
+            color: #d82b2b;
+            font-size: 13px;
+            margin-bottom: 15px;
+            text-align: center;
+            display: none;
+        }
+
+        /* ── Demo credentials notice ── */
+        .demo-note {
+            font-size: 12px;
+            color: #888;
+            text-align: center;
+            margin-top: -30px;
+            margin-bottom: 20px;
+            line-height: 1.5;
+        }
+        .demo-note strong { color: #555; }
+    </style>
+</head>
+<body>
+
+<div class="logo-container">
+    <div class="logo-vdt">VDT</div>
+    <div class="logo-text">
+        Vidyalankar<br>
+        Dnyanapeeth<br>
+        Trust
+    </div>
+</div>
+
+<div class="login-card">
+    <h3>Attendance Authentication</h3>
+
+    <!--
+      NOTE: This login is DEMO-ONLY (frontend-only role routing).
+      No real authentication or session management is implemented.
+      A backend login endpoint (/api/auth/login) will replace this.
+    -->
+    <div class="error-message" id="errorMsg" role="alert"></div>
+    <div id="infoMsg" style="display:none; color:#2e7d32; background:#e8f5e9; border:1px solid #81c784; padding:8px 12px; border-radius:4px; font-size:13px; margin-bottom:15px; text-align:center;" role="status"></div>
+
+    <form id="loginForm" novalidate>
+        <div class="form-group">
+            <select id="role" name="role" aria-label="Select role">
+                <option value="" disabled selected hidden>Role</option>
+                <option value="student">Student</option>
+                <option value="teacher">Teacher</option>
+                <option value="security">Security</option>
+                <option value="admin">Administrator</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <input type="text" id="username" name="username" placeholder="Username" required autocomplete="username">
+        </div>
+        <div class="form-group">
+            <input type="password" id="password" name="password" placeholder="Password" required autocomplete="current-password">
+        </div>
+        <button type="submit" class="login-btn" id="loginBtn">Login</button>
+    </form>
+
+    <p class="demo-note">
+        <strong>Default credentials:</strong><br>
+        Student — <code>prapti</code> · <code>Student@123</code><br>
+        Teacher — <code>teacher</code> · <code>Teacher@123</code><br>
+        Security — <code>security</code> · <code>Security@123</code><br>
+        Admin — <code>admin</code> · <code>Admin@123</code>
+    </p>
+</div>
+
+<script src="auth.js"></script>
+<script>
+    // Make select text colour work once a value is chosen
+    document.getElementById('role').addEventListener('change', function () {
+        this.style.color = '#333';
+    });
+
+    // Check for query param notices (session_expired, logged_out)
+    (function checkUrlNotices() {
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('session_expired')) {
+            showError('Your session has expired or is invalid. Please sign in again.');
+        } else if (params.get('logged_out')) {
+            showInfo('You have been logged out successfully.');
+        } else if (params.get('access_denied')) {
+            showError('Access denied. Please log in with an authorized account.');
+        }
+    })();
+
+    document.getElementById('loginForm').addEventListener('submit', async function (event) {
+        event.preventDefault();
+
+        const username = document.getElementById('username').value.trim();
+        const password = document.getElementById('password').value;
+        const loginBtn = document.getElementById('loginBtn');
+
+        // Clear previous notifications
+        showError('');
+        showInfo('');
+
+        if (!username) { showError('Please enter a username.'); return; }
+        if (!password) { showError('Please enter a password.'); return; }
+
+        loginBtn.disabled = true;
+        loginBtn.textContent = 'Signing in…';
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+        try {
+            const resp = await fetch(`${BACKEND_URL}/api/auth/login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username: username, password: password }),
+                signal: controller.signal
+            });
+            clearTimeout(timeoutId);
+
+            const data = await resp.json().catch(() => ({}));
+
+            if (!resp.ok) {
+                // Reject invalid credentials with generic message
+                const msg = data.detail || 'Invalid username or password. Please try again.';
+                showError(msg);
+                loginBtn.disabled = false;
+                loginBtn.textContent = 'Login';
+                return;
+            }
+
+            // Save token and profile to sessionStorage
+            setSession(data.access_token, data.user);
+
+            // Authoritative server-returned role determines dashboard routing
+            const userRole = (data.user && data.user.role ? data.user.role : '').toLowerCase();
+
+            switch (userRole) {
+                case 'student':
+                    window.location.href = 'student_dashboard.html';
+                    break;
+                case 'teacher':
+                    window.location.href = 'teacher_dashboard.html';
+                    break;
+                case 'security':
+                    window.location.href = 'security_dashboard.html';
+                    break;
+                case 'admin':
+                    // Route administrator to management dashboard
+                    window.location.href = 'teacher_dashboard.html';
+                    break;
+                default:
+                    showError(`Unknown role '${userRole}'. Please contact the system administrator.`);
+                    loginBtn.disabled = false;
+                    loginBtn.textContent = 'Login';
+            }
+
+        } catch (err) {
+            clearTimeout(timeoutId);
+            console.error('[SmartAttendance] Login error:', err);
+            if (err.name === 'AbortError') {
+                showError('Authentication request timed out. Please check if the backend is running.');
+            } else {
+                showError('Unable to connect to authentication server. Please verify the backend is running at ' + BACKEND_URL);
+            }
+            loginBtn.disabled = false;
+            loginBtn.textContent = 'Login';
+        }
+    });
+
+    function showError(message) {
+        const el = document.getElementById('errorMsg');
+        el.textContent = message;
+        el.style.display = message ? 'block' : 'none';
+        if (message) {
+            document.getElementById('infoMsg').style.display = 'none';
+        }
+    }
+
+    function showInfo(message) {
+        const el = document.getElementById('infoMsg');
+        el.textContent = message;
+        el.style.display = message ? 'block' : 'none';
+        if (message) {
+            document.getElementById('errorMsg').style.display = 'none';
+        }
+    }
+</script>
+
+</body>
+</html>

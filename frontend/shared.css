@@ -1,0 +1,224 @@
+/* =========================================================
+   SmartAttendance – shared.css
+   Common styles used across all four dashboard pages.
+   ========================================================= */
+
+/* ── Reset / base ─────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: #f4f7f6;
+    margin: 0;
+    padding: 0;
+    color: #333;
+}
+
+/* ── Header ───────────────────────────────────────────────── */
+.header {
+    background-color: #2b6099;
+    color: white;
+    padding: 15px 30px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.header h1 { margin: 0; font-size: 24px; }
+
+.header--dark { background-color: #2b2b2b; }
+
+.logout-btn {
+    background-color: transparent;
+    color: white;
+    border: 1px solid white;
+    padding: 8px 15px;
+    border-radius: 4px;
+    cursor: pointer;
+    text-decoration: none;
+    font-size: 14px;
+    display: inline-block;
+}
+.logout-btn:hover { background-color: rgba(255, 255, 255, 0.1); }
+
+/* ── Layout container ─────────────────────────────────────── */
+.container {
+    max-width: 1200px;
+    margin: 20px auto;
+    padding: 0 20px;
+}
+
+/* ── Card ─────────────────────────────────────────────────── */
+.card {
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    margin-bottom: 20px;
+}
+.card h2 {
+    margin-top: 0;
+    font-size: 18px;
+    color: #2b6099;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 10px;
+}
+
+/* ── Stats grid ───────────────────────────────────────────── */
+.stats-grid {
+    display: grid;
+    gap: 15px;
+    margin-bottom: 20px;
+}
+.stat-box {
+    background: #f8f9fa;
+    padding: 15px;
+    border-radius: 6px;
+    text-align: center;
+    border: 1px solid #e9ecef;
+}
+.stat-box.highlight { background: #e3f2fd; border-color: #bbdefb; }
+.stat-box span {
+    display: block;
+    font-size: 24px;
+    font-weight: bold;
+    color: #2b6099;
+    margin-bottom: 5px;
+}
+.stat-box label { font-size: 12px; color: #666; }
+
+/* ── Tables ───────────────────────────────────────────────── */
+table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+th, td {
+    padding: 12px 15px;
+    text-align: left;
+    border-bottom: 1px solid #eee;
+    font-size: 14px;
+}
+th { background-color: #f8f9fa; color: #555; font-weight: 600; }
+.table-container { overflow-x: auto; }
+
+/* ── Status colours ───────────────────────────────────────── */
+.status-present    { color: #4da63d; font-weight: bold; }
+.status-absent     { color: #d82b2b; font-weight: bold; }
+.status-recognized { color: #4da63d; font-weight: bold; }
+.status-unknown    { color: #d82b2b; font-weight: bold; }
+
+/* ── Buttons ──────────────────────────────────────────────── */
+.btn {
+    padding: 10px 15px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: bold;
+    color: white;
+}
+.btn-start  { background-color: #4da63d; font-size: 16px; }
+.btn-start:hover  { background-color: #439634; }
+.btn-stop   { background-color: #d82b2b; font-size: 16px; }
+.btn-stop:hover   { background-color: #bd2323; }
+.btn-view   { background-color: #2b6099; }
+.btn-view:hover   { background-color: #225180; }
+
+/* ── Demo banner ──────────────────────────────────────────── */
+.demo-banner {
+    background: #fff3cd;
+    border: 1px solid #ffc107;
+    border-radius: 6px;
+    padding: 8px 14px;
+    font-size: 13px;
+    color: #856404;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.demo-banner::before { content: 'Demo data \2014 not connected to backend'; }
+
+/* ── Tabs ─────────────────────────────────────────────────── */
+.tabs {
+    display: flex;
+    margin-bottom: 20px;
+    border-bottom: 2px solid #ddd;
+}
+.tab {
+    padding: 10px 20px;
+    cursor: pointer;
+    font-weight: 600;
+    color: #666;
+    border-bottom: 3px solid transparent;
+    margin-bottom: -2px;
+    user-select: none;
+}
+.tab.active { color: #2b6099; border-bottom-color: #2b6099; }
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
+/* ── Filters ──────────────────────────────────────────────── */
+.filters {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 15px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+.filters input,
+.filters select {
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+/* ── Progress bar ─────────────────────────────────────────── */
+.progress-container {
+    background-color: #e9ecef;
+    border-radius: 4px;
+    height: 20px;
+    width: 100%;
+    margin-top: 10px;
+    overflow: hidden;
+}
+.progress-bar {
+    background-color: #4da63d;
+    height: 100%;
+    text-align: center;
+    line-height: 20px;
+    color: white;
+    font-size: 12px;
+    font-weight: bold;
+    transition: width 0.5s ease;
+}
+
+/* ── Camera feed ──────────────────────────────────────────── */
+.camera-container,
+.camera-feed {
+    background-color: #000;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    position: relative;
+    overflow: hidden;
+}
+.camera-feed   { height: 400px; }
+.camera-container { height: 450px; margin-bottom: 15px; }
+
+video { width: 100%; height: 100%; object-fit: cover; display: none; }
+
+/* ── Recognition status panel ─────────────────────────────── */
+.recognition-status {
+    background: #f8f9fa;
+    padding: 15px;
+    border-radius: 6px;
+    border: 1px solid #e9ecef;
+}
+.recognition-status p { margin: 10px 0; font-size: 15px; }
+
+/* ── Responsive helpers ───────────────────────────────────── */
+@media (max-width: 768px) {
+    .container { padding: 0 12px; }
+    .stats-grid { grid-template-columns: repeat(2, 1fr) !important; }
+    .two-col, .camera-section { grid-template-columns: 1fr !important; }
+}

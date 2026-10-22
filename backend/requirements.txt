@@ -1,0 +1,15 @@
+fastapi==0.141.1
+uvicorn[standard]==0.52.2
+python-multipart==0.0.20
+python-dotenv==1.1.0
+pydantic==2.12.4
+PyJWT==2.15.1
+bcrypt==5.0.0
+# numpy and opencv-python versions pinned to match the ML module exactly
+numpy==2.5.3
+opencv-python==4.14.0.94
+openpyxl==3.1.5
+pytest==9.1.1
+httpx==0.28.1
+httpx2==2.16.0
+types-openpyxl==3.1.5.20261017

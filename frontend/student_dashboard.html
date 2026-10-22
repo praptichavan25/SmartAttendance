@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Student Dashboard – SmartAttendance</title>
+    <meta name="description" content="View your personal attendance record, summary, and daily status.">
+    <link rel="stylesheet" href="shared.css">
+    <style>
+        .two-col {
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            gap: 20px;
+        }
+        .profile-info { text-align: center; }
+        .profile-info img {
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            background-color: #e0e0e0;
+            margin-bottom: 15px;
+        }
+        .profile-info p      { margin: 5px 0; font-size: 14px; }
+        .profile-info strong { font-size: 18px; display: block; margin-bottom: 5px; }
+
+        .stats-grid { grid-template-columns: repeat(2, 1fr); }
+        .stat-box span { font-size: 24px; }
+
+        .filters { justify-content: flex-end; }
+        .filters label { align-self: center; font-size: 14px; }
+
+        @media (max-width: 768px) {
+            .two-col { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="header" id="pageHeader">
+    <h1>Student Dashboard</h1>
+    <a href="index.html" class="logout-btn" id="logoutBtn">Logout</a>
+</div>
+
+<!-- Authenticated student info bar -->
+<div style="max-width:1200px; margin:16px auto 0; padding:0 20px;">
+    <div style="background:#fff; border:1px solid #e0e0e0; border-radius:8px; padding:12px 18px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+            <span style="font-weight:600; font-size:14px; color:#2b6099;">
+                🎓 Authenticated Student:
+            </span>
+            <span id="sessionStudentInfo" style="font-size:14px; color:#333; font-weight:500;">
+                Verifying session…
+            </span>
+        </div>
+        <div id="backendStatusBadge" style="display:flex; align-items:center; gap:8px; font-size:13px; font-weight:600; padding:4px 14px; border-radius:20px; background:#e9ecef; color:#495057;">
+            <span style="display:inline-block; width:9px; height:9px; border-radius:50%; background:#adb5bd;" id="backendStatusDot"></span>
+            <span id="backendStatusText">Checking backend...</span>
+        </div>
+    </div>
+</div>
+
+<div class="container two-col">
+    <!-- Left column -->
+    <div class="left-column">
+        <div class="card profile-info">
+            <h2>Profile</h2>
+            <!-- SVG avatar placeholder – no external image required -->
+            <img src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='40' fill='%23cccccc'/><circle cx='50' cy='35' r='15' fill='%23ffffff'/><path d='M25 80 Q 50 50 75 80' stroke='%23ffffff' stroke-width='5' fill='none'/></svg>" alt="Profile avatar">
+            <strong id="studentName">–</strong>
+            <p>Roll No: <span id="studentRoll">–</span></p>
+            <p>Department: <span id="studentDept">–</span></p>
+            <p>Class: <span id="studentClass">–</span></p>
+        </div>
+
+        <div class="card">
+            <h2>Attendance Summary</h2>
+            <div class="stats-grid">
+                <div class="stat-box highlight">
+                    <span id="currentStatus" class="status-absent">–</span>
+                    <label>Today's Status</label>
+                </div>
+                <div class="stat-box">
+                    <span id="totalClasses">–</span>
+                    <label>Total Days</label>
+                </div>
+                <div class="stat-box">
+                    <span id="presentDays" style="color:#4da63d;">–</span>
+                    <label>Present</label>
+                </div>
+                <div class="stat-box">
+                    <span id="absentDays" style="color:#d82b2b;">–</span>
+                    <label>Absent</label>
+                </div>
+            </div>
+            <p style="margin-bottom:5px; font-weight:bold; font-size:15px;">
+                Current Attendance: <span id="attendancePercentage">–</span>%
+            </p>
+            <div class="progress-container">
+                <div class="progress-bar" id="progressBar" style="width:0%;">0%</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right column -->
+    <div class="right-column">
+        <div class="card">
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+                <h2 style="margin:0; border-bottom:none; padding-bottom:0;">My Attendance</h2>
+                <button class="btn btn-view" style="padding:6px 12px; font-size:12px; background:#4da63d;" onclick="loadAllData()">Refresh</button>
+            </div>
+            <div class="filters" style="margin-top:15px;">
+                <label for="monthFilter">Filter:</label>
+                <select id="monthFilter" aria-label="Filter by month">
+                    <option value="all">All Months</option>
+                    <option value="01">January</option>
+                    <option value="02">February</option>
+                    <option value="03">March</option>
+                    <option value="04">April</option>
+                    <option value="05">May</option>
+                    <option value="06">June</option>
+                    <option value="07">July</option>
+                    <option value="08">August</option>
+                    <option value="09">September</option>
+                    <option value="10">October</option>
+                    <option value="11">November</option>
+                    <option value="12">December</option>
+                </select>
+                <input type="date" id="dateFilter" aria-label="Filter by date">
+                <button class="btn btn-view" style="padding:6px 12px; font-size:13px; background:#6c757d;" onclick="resetFilters()">Reset</button>
+            </div>
+
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th scope="col">Date</th>
+                            <th scope="col">Entry Time</th>
+                            <th scope="col">Status</th>
+                            <th scope="col">Verification</th>
+                        </tr>
+                    </thead>
+                    <tbody id="attendanceTableBody">
+                        <!-- Populated by JS -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="auth.js"></script>
+<script>
+    /* ── Normalize URL: redirect from [::] to localhost if needed ── */
+    if (window.location.hostname === '::' || window.location.hostname === '[::]') {
+        const portStr = window.location.port ? `:${window.location.port}` : '';
+        window.location.replace(`http://localhost${portStr}${window.location.pathname}${window.location.search}`);
+    }
+
+    /* ── State ── */
+    let currentUser = null;
+    let studentRecords = [];
+
+    /* ── Safe table cell helper (prevents HTML injection) ── */
+    function createCell(text, className) {
+        const td = document.createElement('td');
+        if (className) td.className = className;
+        td.textContent = text != null ? text : '–';
+        return td;
+    }
+
+    /* ── Date helper (ISO YYYY-MM-DD local) ── */
+    function getTodayIsoDate() {
+        const d = new Date();
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    }
+
+    /* ── Backend Health Check ── */
+    async function checkBackendHealth() {
+        const dot   = document.getElementById('backendStatusDot');
+        const text  = document.getElementById('backendStatusText');
+        const badge = document.getElementById('backendStatusBadge');
+
+        try {
+            const resp = await fetch(`${BACKEND_URL}/api/health`, { method: 'GET' });
+            if (resp.ok) {
+                const data = await resp.json();
+                if (dot) dot.style.background = '#4da63d';
+                if (text) text.textContent = `Backend Online (${data.total_students} students)`;
+                if (badge) {
+                    badge.style.background = '#e8f5e9';
+                    badge.style.color = '#2e7d32';
+                }
+            } else {
+                throw new Error(`HTTP ${resp.status}`);
+            }
+        } catch (err) {
+            if (dot) dot.style.background = '#d82b2b';
+            if (text) text.textContent = 'Backend Offline';
+            if (badge) {
+                badge.style.background = '#ffebee';
+                badge.style.color = '#c62828';
+            }
+        }
+    }
+
+    /* ── Render student profile and summary stats ── */
+    function renderStudentView() {
+        if (!currentUser) return;
+
+        // Capitalize student name for display
+        const rawName = currentUser.username || 'Student';
+        const displayName = rawName.charAt(0).toUpperCase() + rawName.slice(1);
+        const rollNo = currentUser.roll_no || '–';
+
+        // 1. Profile and Banner info
+        document.getElementById('studentName').textContent = displayName;
+        document.getElementById('studentRoll').textContent = rollNo;
+        document.getElementById('sessionStudentInfo').textContent = `${displayName} (${rollNo})`;
+
+        // Derive department & class from records if present
+        let dept = 'Computer Science';
+        let cls = 'SY B.Tech';
+        if (studentRecords.length > 0 && studentRecords[0].department) {
+            dept = studentRecords[0].department;
+        }
+        document.getElementById('studentDept').textContent = dept;
+        document.getElementById('studentClass').textContent = cls;
+
+        // 2. Attendance calculations (derived strictly from this student's authenticated records)
+        const totalUniqueDays = new Set(studentRecords.map(r => r.date)).size;
+        const totalDaysCount = Math.max(totalUniqueDays, 1);
+
+        const presentCount = studentRecords.filter(r => (r.status || '').toLowerCase() === 'present').length;
+        const absentCount = Math.max(0, totalDaysCount - presentCount);
+        const percentage = Math.round((presentCount / totalDaysCount) * 100);
+
+        const todayStr = getTodayIsoDate();
+        const markedToday = studentRecords.some(
+            r => r.date === todayStr && (r.status || '').toLowerCase() === 'present'
+        );
+
+        const statusEl = document.getElementById('currentStatus');
+        statusEl.textContent = markedToday ? 'Present' : 'Absent';
+        statusEl.className = markedToday ? 'status-present' : 'status-absent';
+
+        document.getElementById('totalClasses').textContent = totalDaysCount;
+        document.getElementById('presentDays').textContent = presentCount;
+        document.getElementById('absentDays').textContent = absentCount;
+        document.getElementById('attendancePercentage').textContent = percentage;
+
+        const progressBar = document.getElementById('progressBar');
+        progressBar.style.width = `${percentage}%`;
+        progressBar.textContent = `${percentage}%`;
+
+        // 3. Render table
+        applyFiltersAndRender();
+    }
+
+    /* ── Fetch authenticated student attendance from backend ── */
+    async function loadAllData() {
+        checkBackendHealth();
+
+        const tbody = document.getElementById('attendanceTableBody');
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:20px; color:#666;">Loading your attendance records from server...</td></tr>';
+
+        try {
+            const resp = await fetch(`${BACKEND_URL}/api/attendance/me`, {
+                method: 'GET',
+                headers: getAuthHeaders()
+            });
+
+            if (handleAuthResponseError(resp)) return;
+
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+
+            studentRecords = await resp.json();
+            renderStudentView();
+
+        } catch (err) {
+            console.error('[SmartAttendance] Failed to load student attendance:', err);
+            tbody.innerHTML = '';
+            const tr = document.createElement('tr');
+            const td = document.createElement('td');
+            td.colSpan = 4;
+            td.style.textAlign = 'center';
+            td.style.padding = '20px';
+            td.style.color = '#d82b2b';
+            td.innerHTML = `⚠️ Failed to load your attendance records from backend (${BACKEND_URL}). <button class="btn btn-view" style="margin-left:10px; padding:4px 10px; font-size:12px;" onclick="loadAllData()">Retry</button>`;
+            tr.appendChild(td);
+            tbody.appendChild(tr);
+        }
+    }
+
+    /* ── Apply filters & render table ── */
+    function applyFiltersAndRender() {
+        const monthVal = document.getElementById('monthFilter').value;
+        const dateVal  = document.getElementById('dateFilter').value;
+
+        let filtered = studentRecords;
+        if (monthVal && monthVal !== 'all') {
+            filtered = filtered.filter(r => {
+                const parts = (r.date || '').split('-');
+                return parts[1] === monthVal;
+            });
+        }
+        if (dateVal) {
+            filtered = filtered.filter(r => r.date === dateVal);
+        }
+
+        renderAttendanceTable(filtered);
+    }
+
+    /* ── Render table rows ── */
+    function renderAttendanceTable(records) {
+        const tbody = document.getElementById('attendanceTableBody');
+        tbody.innerHTML = '';
+
+        if (!records || records.length === 0) {
+            const tr = document.createElement('tr');
+            const td = document.createElement('td');
+            td.colSpan = 4;
+            td.style.textAlign = 'center';
+            td.style.padding = '20px';
+            td.style.color = '#888';
+            td.textContent = 'No attendance records found matching filters.';
+            tr.appendChild(td);
+            tbody.appendChild(tr);
+            return;
+        }
+
+        records.forEach(r => {
+            const tr = document.createElement('tr');
+            tr.appendChild(createCell(r.date));
+            tr.appendChild(createCell(r.entry_time || '–'));
+
+            const statusLower = (r.status || 'present').toLowerCase();
+            const isPresent   = statusLower === 'present';
+            const statusText  = isPresent ? 'Present' : 'Absent';
+            tr.appendChild(createCell(statusText, isPresent ? 'status-present' : 'status-absent'));
+
+            const verifText = (r.similarity != null && r.similarity > 0)
+                ? `Verified (${Math.round(r.similarity * 100)}%)`
+                : 'Verified';
+            tr.appendChild(createCell(verifText));
+
+            tbody.appendChild(tr);
+        });
+    }
+
+    /* ── Filter change events ── */
+    document.getElementById('monthFilter').addEventListener('change', () => {
+        document.getElementById('dateFilter').value = '';
+        applyFiltersAndRender();
+    });
+
+    document.getElementById('dateFilter').addEventListener('change', () => {
+        document.getElementById('monthFilter').value = 'all';
+        applyFiltersAndRender();
+    });
+
+    function resetFilters() {
+        document.getElementById('monthFilter').value = 'all';
+        document.getElementById('dateFilter').value = '';
+        applyFiltersAndRender();
+    }
+
+    /* ── Initialization ── */
+    async function init() {
+        // Enforce student role authentication before loading data
+        currentUser = await requireAuth(['student']);
+        if (!currentUser) return; // Handled by requireAuth
+
+        // Wire logout button
+        document.getElementById('logoutBtn').addEventListener('click', function(e) {
+            e.preventDefault();
+            logout();
+        });
+
+        loadAllData();
+    }
+
+    init();
+</script>
+
+</body>
+</html>

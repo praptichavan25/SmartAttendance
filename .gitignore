@@ -1,22 +1,79 @@
-# Python
+# ── Python ────────────────────────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
+*.pyo
+*.pyd
+*.so
+
+# ── Virtual environments ───────────────────────────────────────────────────────
 venv/
 .venv/
+env/
+.env.local
 
-# macOS
-.DS_Store
+# ── Environment / Secrets ─────────────────────────────────────────────────────
+# Never commit .env files; use .env.example as the template
+.env
+backend/.env
+*.env
 
-# Face dataset - keep private
+# ── Database files ────────────────────────────────────────────────────────────
+# SQLite databases contain student PII, attendance records, and guest data
+*.db
+*.sqlite
+*.sqlite3
+
+# ── ML: Biometric and face data (PRIVATE — do not commit) ────────────────────
+# Registered student face photos
 ml/dataset/registered/
 
-# Generated face embeddings
+# Face embeddings are biometric data — keep off Git
 ml/embeddings/
 
-# Model files
+# ── ML: Large ONNX model files ────────────────────────────────────────────────
+# The SFace model is 37 MB — too large for standard Git
+# Download instructions are in README.md (Step 4)
 ml/models/*.onnx
 ml/models/*.pt
+ml/models/*.pth
+ml/models/*.caffemodel
 
-# IDE
+# ── Test / ML dataset test images ─────────────────────────────────────────────
+ml/dataset/test/
+
+# ── Test and build artefacts ──────────────────────────────────────────────────
+.pytest_cache/
+.coverage
+htmlcov/
+*.egg-info/
+dist/
+build/
+*.egg
+
+# ── IDE and editor ────────────────────────────────────────────────────────────
 .vscode/
 .idea/
+*.swp
+*.swo
+*~
+
+# ── macOS ─────────────────────────────────────────────────────────────────────
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+
+# ── Type checker caches ───────────────────────────────────────────────────────
+.mypy_cache/
+.pytype/
+.ruff_cache/
+
+# ── Generated reports ─────────────────────────────────────────────────────────
+*.xlsx
+*.pdf
+*.csv
+
+# ── Logs ──────────────────────────────────────────────────────────────────────
+*.log
+logs/
